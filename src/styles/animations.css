@@ -1,0 +1,80 @@
+/* ── Keyframes ──────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ── Skeleton Loading ────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg,
+    var(--color-navy-100) 25%,
+    var(--color-navy-200) 50%,
+    var(--color-navy-100) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-md);
+}
+
+/* ── Page enter animation ────────────────────────── */
+.page-enter {
+  animation: fadeIn 0.2s ease, slideUp 0.2s ease;
+}
+
+/* ── Toast notifications ─────────────────────────── */
+.toast-container {
+  position: fixed;
+  bottom: var(--space-6);
+  right: var(--space-6);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-navy-800);
+  color: #fff;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  pointer-events: all;
+  min-width: 280px;
+  max-width: 400px;
+  animation: slideUp 0.25s ease;
+}
+
+.toast-success { border-left: 3px solid var(--color-green-500); }
+.toast-error   { border-left: 3px solid var(--color-red-500); }
+.toast-warning { border-left: 3px solid var(--color-amber-500); }
+.toast-info    { border-left: 3px solid var(--color-blue-500); }
