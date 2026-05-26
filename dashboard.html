@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — RestaurantOS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/main.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-placeholder"></div>
+
+  <div class="main-content">
+    <div class="topbar">
+      <div>
+        <div class="topbar-title">Dashboard</div>
+        <div class="topbar-subtitle" id="topbar-sub">Resumen de métricas y actividad</div>
+      </div>
+      <div class="topbar-actions">
+        <span id="today-date" style="font-size:13px;color:var(--text-tertiary)"></span>
+      </div>
+    </div>
+
+    <div class="page-body">
+      <!-- Stats -->
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon orange">💰</div>
+          <div class="stat-label">Ventas del día</div>
+          <div class="stat-value" id="stat-ventas">—</div>
+          <div class="stat-meta" id="stat-ordenes-meta">cargando...</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon blue">🧾</div>
+          <div class="stat-label">Ticket promedio</div>
+          <div class="stat-value" id="stat-ticket">—</div>
+          <div class="stat-meta">Promedio hoy</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon green">👨‍🍳</div>
+          <div class="stat-label">Meseros activos</div>
+          <div class="stat-value" id="stat-meseros">—</div>
+          <div class="stat-meta">Con ventas hoy</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon yellow">📋</div>
+          <div class="stat-label">Órdenes totales</div>
+          <div class="stat-value" id="stat-ordenes">—</div>
+          <div class="stat-meta">Hoy</div>
+        </div>
+      </div>
+
+      <!-- Charts row -->
+      <div class="grid-2-1" style="margin-bottom:18px">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Ventas de la semana</div>
+              <div class="card-subtitle">Últimos 7 días</div>
+            </div>
+          </div>
+          <div class="chart-container" style="height:220px">
+            <canvas id="chart-ventas"></canvas>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Ticket promedio</div>
+              <div class="card-subtitle">Últimos 7 días</div>
+            </div>
+          </div>
+          <div class="chart-container" style="height:220px">
+            <canvas id="chart-ticket"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ranking + Incentivos + Avisos -->
+      <div class="grid-2-1">
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <!-- Ranking -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">🥇 Ranking semanal</div>
+                <div class="card-subtitle">Top meseros de la semana</div>
+              </div>
+              <a href="metricas.html" class="btn btn-ghost btn-sm">Ver todo</a>
+            </div>
+            <div id="ranking-list">
+              <div class="loading-overlay"><div class="spinner"></div> Cargando...</div>
+            </div>
+          </div>
+
+          <!-- Avisos recientes -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">🔔 Avisos recientes</div>
+              </div>
+              <a href="avisos.html" class="btn btn-ghost btn-sm">Ver todos</a>
+            </div>
+            <div id="avisos-list">
+              <div class="loading-overlay"><div class="spinner"></div> Cargando...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Incentivos activos -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">🏆 Incentivos activos</div>
+              <div class="card-subtitle">Concursos en curso</div>
+            </div>
+          </div>
+          <div id="incentivos-list">
+            <div class="loading-overlay"><div class="spinner"></div> Cargando...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase.js"></script>
+<script src="js/layout.js"></script>
+<script>
+let ventasChart, ticketChart
+
+async function init() {
+  await renderLayout('dashboard.html')
+
+  const user = Auth.getUser()
+  const restaurantId = getActiveRestaurant()
+
+  // Fecha de hoy
+  document.getElementById('today-date').textContent =
+    new Date().toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long', year:'numeric' })
+
+  if (!restaurantId) {
+    document.getElementById('stats-grid').innerHTML =
+      '<div class="alert alert-info">Selecciona un restaurante para ver las métricas.</div>'
+    return
+  }
+
+  const today = DateUtils.today()
+  const weekAgo = DateUtils.daysAgo(6)
+
+  // Métricas del día
+  const todayMetrics = await DB.getMetrics(restaurantId, today, today)
+  renderStats(todayMetrics)
+
+  // Métricas semana
+  const weekMetrics = await DB.getMetrics(restaurantId, weekAgo, today)
+  renderCharts(weekMetrics)
+  renderRanking(weekMetrics)
+
+  // Incentivos
+  const incentivos = await DB.getIncentives(restaurantId)
+  renderIncentivos(incentivos)
+
+  // Avisos
+  const avisos = await DB.getNotices(restaurantId)
+  renderAvisos(avisos)
+}
+
+function renderStats(metrics) {
+  const totalVentas  = metrics.reduce((s, m) => s + parseFloat(m.total_sales || 0), 0)
+  const totalOrdenes = metrics.reduce((s, m) => s + parseInt(m.total_orders || 0), 0)
+  const meseros      = new Set(metrics.map(m => m.waiter_id)).size
+  const ticket       = totalOrdenes > 0 ? totalVentas / totalOrdenes : 0
+
+  document.getElementById('stat-ventas').textContent       = DateUtils.formatMoney(totalVentas)
+  document.getElementById('stat-ticket').textContent       = DateUtils.formatMoney(ticket)
+  document.getElementById('stat-meseros').textContent      = meseros
+  document.getElementById('stat-ordenes').textContent      = totalOrdenes
+  document.getElementById('stat-ordenes-meta').textContent = `${totalOrdenes} órdenes`
+}
+
+function renderCharts(metrics) {
+  // Agrupar por fecha
+  const byDate = {}
+  metrics.forEach(m => {
+    if (!byDate[m.metric_date]) byDate[m.metric_date] = { ventas: 0, ordenes: 0 }
+    byDate[m.metric_date].ventas  += parseFloat(m.total_sales || 0)
+    byDate[m.metric_date].ordenes += parseInt(m.total_orders || 0)
+  })
+
+  const labels = Object.keys(byDate).sort()
+  const ventas = labels.map(d => byDate[d].ventas)
+  const tickets = labels.map(d => byDate[d].ordenes > 0
+    ? byDate[d].ventas / byDate[d].ordenes : 0)
+
+  const labelsFmt = labels.map(d => {
+    const dt = new Date(d + 'T00:00:00')
+    return dt.toLocaleDateString('es-MX', { weekday:'short', day:'numeric' })
+  })
+
+  const baseOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: {
+      backgroundColor: '#1A1916',
+      titleColor: '#fff',
+      bodyColor: 'rgba(255,255,255,0.7)',
+      padding: 10,
+      cornerRadius: 8,
+    }},
+    scales: {
+      x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#9E9B95' }},
+      y: { grid: { color: '#F0EFEB' }, ticks: { font: { size: 11 }, color: '#9E9B95' }}
+    }
+  }
+
+  // Ventas chart
+  const ctx1 = document.getElementById('chart-ventas').getContext('2d')
+  const grad1 = ctx1.createLinearGradient(0,0,0,200)
+  grad1.addColorStop(0, 'rgba(232,89,60,0.25)')
+  grad1.addColorStop(1, 'rgba(232,89,60,0.02)')
+
+  if (ventasChart) ventasChart.destroy()
+  ventasChart = new Chart(ctx1, {
+    type: 'line',
+    data: {
+      labels: labelsFmt,
+      datasets: [{
+        data: ventas,
+        borderColor: '#E8593C',
+        backgroundColor: grad1,
+        borderWidth: 2.5,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 3,
+        pointBackgroundColor: '#E8593C'
+      }]
+    },
+    options: { ...baseOpts, scales: { ...baseOpts.scales, y: {
+      ...baseOpts.scales.y,
+      ticks: { ...baseOpts.scales.y.ticks, callback: v => '$' + (v/1000).toFixed(0) + 'k' }
+    }}}
+  })
+
+  // Ticket chart
+  const ctx2 = document.getElementById('chart-ticket').getContext('2d')
+  if (ticketChart) ticketChart.destroy()
+  ticketChart = new Chart(ctx2, {
+    type: 'bar',
+    data: {
+      labels: labelsFmt,
+      datasets: [{
+        data: tickets,
+        backgroundColor: '#DBEAFE',
+        borderColor: '#3B82F6',
+        borderWidth: 1.5,
+        borderRadius: 6,
+      }]
+    },
+    options: { ...baseOpts, scales: { ...baseOpts.scales, y: {
+      ...baseOpts.scales.y,
+      ticks: { ...baseOpts.scales.y.ticks, callback: v => '$' + v.toFixed(0) }
+    }}}
+  })
+}
+
+function renderRanking(metrics) {
+  // Agrupar por mesero
+  const byWaiter = {}
+  metrics.forEach(m => {
+    if (!byWaiter[m.waiter_id]) byWaiter[m.waiter_id] = { name: m.waiter_name, ventas: 0, ordenes: 0 }
+    byWaiter[m.waiter_id].ventas  += parseFloat(m.total_sales || 0)
+    byWaiter[m.waiter_id].ordenes += parseInt(m.total_orders || 0)
+  })
+
+  const sorted = Object.values(byWaiter).sort((a, b) => b.ventas - a.ventas).slice(0, 5)
+
+  const posClasses = ['gold', 'silver', 'bronze']
+
+  const html = sorted.length === 0
+    ? '<div class="empty-state"><div class="empty-state-text">Sin datos esta semana</div></div>'
+    : sorted.map((w, i) => `
+        <div class="ranking-item">
+          <div class="ranking-pos ${posClasses[i] || ''}">${i + 1}</div>
+          <div class="ranking-info">
+            <div class="ranking-name">${w.name || 'Mesero'}</div>
+            <div class="ranking-meta">${DateUtils.formatMoney(w.ventas)} · ${w.ordenes} órdenes</div>
+          </div>
+        </div>`).join('')
+
+  document.getElementById('ranking-list').innerHTML = html
+}
+
+function renderIncentivos(incentivos) {
+  const activos = incentivos.filter(i => i.active)
+
+  if (activos.length === 0) {
+    document.getElementById('incentivos-list').innerHTML =
+      '<div class="empty-state"><div class="empty-state-icon">🏆</div><div class="empty-state-text">Sin incentivos activos</div></div>'
+    return
+  }
+
+  const typeColors = {
+    ventas_totales: { bg: '#DBEAFE', color: '#1D4ED8', label: 'Ventas' },
+    ticket_promedio: { bg: '#D1FAE5', color: '#065F46', label: 'Ticket' },
+    combinado: { bg: '#EDE9FE', color: '#5B21B6', label: 'Combinado' }
+  }
+
+  document.getElementById('incentivos-list').innerHTML = activos.map(inc => {
+    const tc = typeColors[inc.type] || typeColors.combinado
+    const progress = inc.incentive_progress || []
+    const maxProgress = progress.length > 0
+      ? Math.max(...progress.map(p => parseFloat(p.current_amount || 0)))
+      : 0
+    const pct = inc.goal_amount > 0 ? Math.min(100, (maxProgress / inc.goal_amount) * 100) : 0
+
+    return `
+      <div style="padding:14px 0;border-bottom:1px solid var(--border)">
+        <div class="flex-between mb-8">
+          <div style="font-size:13.5px;font-weight:600">${inc.title}</div>
+          <span class="badge" style="background:${tc.bg};color:${tc.color}">${tc.label}</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-tertiary);margin-bottom:10px">
+          📅 ${DateUtils.format(inc.start_date)} — ${DateUtils.format(inc.end_date)}
+        </div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">
+          Meta: <strong>${DateUtils.formatMoney(inc.goal_amount)}</strong>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:${pct}%"></div>
+        </div>
+        <div style="font-size:11px;color:var(--text-tertiary);margin-top:4px">${pct.toFixed(0)}% alcanzado</div>
+        ${inc.prize ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:8px">🎁 ${inc.prize}</div>` : ''}
+      </div>`
+  }).join('')
+}
+
+function renderAvisos(avisos) {
+  if (avisos.length === 0) {
+    document.getElementById('avisos-list').innerHTML =
+      '<div class="empty-state"><div class="empty-state-text">Sin avisos recientes</div></div>'
+    return
+  }
+
+  const priorityColors = { alta: '#C0392B', media: '#B07C1A', baja: '#1E6FA8' }
+  const priorityDots = { alta: '🔴', media: '🟡', baja: '🔵' }
+
+  document.getElementById('avisos-list').innerHTML = avisos.slice(0, 4).map(a => `
+    <div style="padding:12px 0;border-bottom:1px solid var(--border)">
+      <div class="flex-between mb-4">
+        <div style="font-size:13.5px;font-weight:600">${priorityDots[a.priority] || '🔵'} ${a.title}</div>
+      </div>
+      ${a.content ? `<div style="font-size:13px;color:var(--text-secondary);line-height:1.5">${a.content}</div>` : ''}
+      <div style="font-size:11.5px;color:var(--text-tertiary);margin-top:6px">
+        ${new Date(a.created_at).toLocaleDateString('es-MX', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}
+      </div>
+    </div>`).join('')
+}
+
+init()
+</script>
+</body>
+</html>

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Métricas — RestaurantOS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/main.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-placeholder"></div>
+
+  <div class="main-content">
+    <div class="topbar">
+      <div>
+        <div class="topbar-title">Métricas</div>
+        <div class="topbar-subtitle">Análisis detallado de ventas y rendimiento</div>
+      </div>
+      <div class="topbar-actions">
+        <select class="form-select" style="width:auto;padding:7px 12px;font-size:13px" id="period-select" onchange="loadData()">
+          <option value="7">Última semana</option>
+          <option value="14">2 semanas</option>
+          <option value="30">Último mes</option>
+          <option value="90">3 meses</option>
+        </select>
+        <select class="form-select" style="width:auto;padding:7px 12px;font-size:13px" id="waiter-select" onchange="loadData()">
+          <option value="">Todos los meseros</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="page-body">
+      <!-- Stats -->
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon orange">💰</div>
+          <div class="stat-label">Ventas totales</div>
+          <div class="stat-value" id="s-ventas">—</div>
+          <div class="stat-meta" id="s-ventas-meta">del período</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon blue">🧾</div>
+          <div class="stat-label">Ticket promedio</div>
+          <div class="stat-value" id="s-ticket">—</div>
+          <div class="stat-meta">Promedio del período</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon green">📋</div>
+          <div class="stat-label">Órdenes</div>
+          <div class="stat-value" id="s-ordenes">—</div>
+          <div class="stat-meta">Total de órdenes</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon yellow">⬆️</div>
+          <div class="stat-label">Upsell</div>
+          <div class="stat-value" id="s-upsell">—</div>
+          <div class="stat-meta">0% de ventas</div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('ventas', this)">Ventas</div>
+        <div class="tab" onclick="switchTab('ticket', this)">Ticket promedio</div>
+        <div class="tab" onclick="switchTab('ordenes', this)">Órdenes</div>
+        <div class="tab" onclick="switchTab('combinada', this)">Vista combinada</div>
+      </div>
+
+      <!-- Chart panel -->
+      <div class="card" style="margin-bottom:18px">
+        <div class="card-header">
+          <div>
+            <div class="card-title" id="chart-title">Evolución de ventas</div>
+            <div class="card-subtitle" id="chart-subtitle">Ventas diarias en el período seleccionado</div>
+          </div>
+        </div>
+        <div class="chart-container" style="height:280px">
+          <canvas id="main-chart"></canvas>
+        </div>
+      </div>
+
+      <!-- Tabla por mesero -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Desglose por mesero</div>
+            <div class="card-subtitle">Rendimiento individual en el período</div>
+          </div>
+        </div>
+        <div class="table-wrap" style="border:none;border-radius:0">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Mesero</th>
+                <th>Ventas totales</th>
+                <th>Órdenes</th>
+                <th>Ticket prom.</th>
+                <th>Upsell</th>
+              </tr>
+            </thead>
+            <tbody id="waiter-table">
+              <tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-tertiary)">Cargando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase.js"></script>
+<script src="js/layout.js"></script>
+<script>
+let mainChart
+let currentTab = 'ventas'
+let allMetrics = []
+
+async function init() {
+  await renderLayout('metricas.html')
+  await loadWaiters()
+  await loadData()
+}
+
+async function loadWaiters() {
+  const restaurantId = getActiveRestaurant()
+  if (!restaurantId) return
+  const users = await DB.getUsers(restaurantId)
+  const meseros = users.filter(u => u.role === 'mesero')
+  const sel = document.getElementById('waiter-select')
+  meseros.forEach(w => {
+    const opt = document.createElement('option')
+    opt.value = w.id
+    opt.textContent = w.name
+    sel.appendChild(opt)
+  })
+}
+
+async function loadData() {
+  const restaurantId = getActiveRestaurant()
+  if (!restaurantId) return
+
+  const days = parseInt(document.getElementById('period-select').value)
+  const waiterId = document.getElementById('waiter-select').value || null
+  const from = DateUtils.daysAgo(days - 1)
+  const to   = DateUtils.today()
+
+  allMetrics = await DB.getMetrics(restaurantId, from, to, waiterId)
+  renderStats(allMetrics)
+  renderChart(allMetrics, currentTab)
+  renderTable(allMetrics)
+}
+
+function renderStats(metrics) {
+  const ventas   = metrics.reduce((s, m) => s + parseFloat(m.total_sales || 0), 0)
+  const ordenes  = metrics.reduce((s, m) => s + parseInt(m.total_orders || 0), 0)
+  const upsell   = metrics.reduce((s, m) => s + parseFloat(m.upsell_amount || 0), 0)
+  const ticket   = ordenes > 0 ? ventas / ordenes : 0
+
+  document.getElementById('s-ventas').textContent  = DateUtils.formatMoney(ventas)
+  document.getElementById('s-ticket').textContent  = DateUtils.formatMoney(ticket)
+  document.getElementById('s-ordenes').textContent = ordenes
+  document.getElementById('s-upsell').textContent  = DateUtils.formatMoney(upsell)
+}
+
+function renderChart(metrics, tab) {
+  const byDate = {}
+  metrics.forEach(m => {
+    if (!byDate[m.metric_date]) byDate[m.metric_date] = { ventas: 0, ordenes: 0, upsell: 0 }
+    byDate[m.metric_date].ventas  += parseFloat(m.total_sales || 0)
+    byDate[m.metric_date].ordenes += parseInt(m.total_orders || 0)
+    byDate[m.metric_date].upsell  += parseFloat(m.upsell_amount || 0)
+  })
+
+  const labels = Object.keys(byDate).sort()
+  const labelsFmt = labels.map(d => {
+    const dt = new Date(d + 'T00:00:00')
+    return dt.toLocaleDateString('es-MX', { day:'numeric', month:'short' })
+  })
+
+  const configs = {
+    ventas: {
+      data: labels.map(d => byDate[d].ventas),
+      color: '#E8593C', label: 'Ventas', title: 'Evolución de ventas',
+      sub: 'Ventas diarias en el período seleccionado',
+      yFmt: v => '$' + (v/1000).toFixed(1) + 'k'
+    },
+    ticket: {
+      data: labels.map(d => byDate[d].ordenes > 0 ? byDate[d].ventas / byDate[d].ordenes : 0),
+      color: '#3B82F6', label: 'Ticket promedio', title: 'Ticket promedio diario',
+      sub: 'Ticket promedio por orden en el período',
+      yFmt: v => '$' + v.toFixed(0)
+    },
+    ordenes: {
+      data: labels.map(d => byDate[d].ordenes),
+      color: '#10B981', label: 'Órdenes', title: 'Órdenes por día',
+      sub: 'Total de órdenes procesadas por día',
+      yFmt: v => v.toFixed(0)
+    },
+    combinada: {
+      data: labels.map(d => byDate[d].ventas),
+      color: '#8B5CF6', label: 'Ventas', title: 'Vista combinada',
+      sub: 'Ventas y órdenes en el período',
+      yFmt: v => '$' + (v/1000).toFixed(1) + 'k'
+    }
+  }
+
+  const cfg = configs[tab] || configs.ventas
+  document.getElementById('chart-title').textContent    = cfg.title
+  document.getElementById('chart-subtitle').textContent = cfg.sub
+
+  const ctx = document.getElementById('main-chart').getContext('2d')
+  const grad = ctx.createLinearGradient(0, 0, 0, 280)
+  grad.addColorStop(0, cfg.color + '30')
+  grad.addColorStop(1, cfg.color + '05')
+
+  if (mainChart) mainChart.destroy()
+  mainChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labelsFmt,
+      datasets: [{
+        label: cfg.label,
+        data: cfg.data,
+        borderColor: cfg.color,
+        backgroundColor: grad,
+        borderWidth: 2.5,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 4,
+        pointBackgroundColor: cfg.color,
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1A1916',
+          titleColor: '#fff',
+          bodyColor: 'rgba(255,255,255,0.7)',
+          padding: 10,
+          cornerRadius: 8,
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#9E9B95' }},
+        y: {
+          grid: { color: '#F0EFEB' },
+          ticks: { font: { size: 11 }, color: '#9E9B95', callback: cfg.yFmt }
+        }
+      }
+    }
+  })
+}
+
+function renderTable(metrics) {
+  const byWaiter = {}
+  metrics.forEach(m => {
+    if (!byWaiter[m.waiter_id]) byWaiter[m.waiter_id] = {
+      name: m.waiter_name || 'Sin nombre', ventas: 0, ordenes: 0, upsell: 0
+    }
+    byWaiter[m.waiter_id].ventas  += parseFloat(m.total_sales || 0)
+    byWaiter[m.waiter_id].ordenes += parseInt(m.total_orders || 0)
+    byWaiter[m.waiter_id].upsell  += parseFloat(m.upsell_amount || 0)
+  })
+
+  const sorted = Object.values(byWaiter).sort((a, b) => b.ventas - a.ventas)
+
+  if (sorted.length === 0) {
+    document.getElementById('waiter-table').innerHTML =
+      '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-tertiary)">Sin datos en este período</td></tr>'
+    return
+  }
+
+  const posEmoji = ['🥇', '🥈', '🥉']
+  document.getElementById('waiter-table').innerHTML = sorted.map((w, i) => {
+    const ticket = w.ordenes > 0 ? w.ventas / w.ordenes : 0
+    return `
+      <tr>
+        <td style="font-weight:600;color:var(--text-secondary)">${posEmoji[i] || (i+1)}</td>
+        <td style="font-weight:500">${w.name}</td>
+        <td class="font-mono">${DateUtils.formatMoney(w.ventas)}</td>
+        <td>${w.ordenes}</td>
+        <td class="font-mono">${DateUtils.formatMoney(ticket)}</td>
+        <td class="font-mono text-success">${DateUtils.formatMoney(w.upsell)}</td>
+      </tr>`
+  }).join('')
+}
+
+function switchTab(tab, el) {
+  currentTab = tab
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'))
+  el.classList.add('active')
+  renderChart(allMetrics, tab)
+}
+
+init()
+</script>
+</body>
+</html>

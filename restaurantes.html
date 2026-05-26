@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Restaurantes — RestaurantOS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-placeholder"></div>
+  <div class="main-content">
+    <div class="topbar">
+      <div>
+        <div class="topbar-title">Restaurantes</div>
+        <div class="topbar-subtitle">Gestión de unidades y sucursales</div>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn btn-primary" onclick="openCreateModal()">+ Crear restaurante</button>
+      </div>
+    </div>
+    <div class="page-body">
+      <!-- Stats -->
+      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:18px">
+        <div class="stat-card"><div class="stat-label">Total restaurantes</div><div class="stat-value" id="s-total">—</div></div>
+        <div class="stat-card"><div class="stat-label">Activos</div><div class="stat-value" id="s-activos">—</div></div>
+        <div class="stat-card"><div class="stat-label">Con gerente</div><div class="stat-value" id="s-gerente">—</div></div>
+      </div>
+
+      <div id="restaurants-grid">
+        <div class="loading-overlay"><div class="spinner"></div> Cargando...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal-restaurant">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-rest-title">Crear restaurante</div>
+      <div class="modal-close" onclick="hideModal('modal-restaurant')">✕</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Nombre</label>
+      <input class="form-input" id="r-name" placeholder="Restaurante Centro">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Dirección</label>
+      <input class="form-input" id="r-address" placeholder="Av. Principal 123, Centro">
+    </div>
+    <input type="hidden" id="r-id">
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="hideModal('modal-restaurant')">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveRestaurant()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase.js"></script>
+<script src="js/layout.js"></script>
+<script>
+let allRestaurants = []
+let allUsers = []
+
+async function init() {
+  await renderLayout('restaurantes.html')
+  allUsers = await DB.getUsers()
+  await loadRestaurants()
+}
+
+async function loadRestaurants() {
+  const { data } = await db.from('restaurants').select('*').order('name')
+  allRestaurants = data || []
+  renderStats(allRestaurants)
+  renderGrid(allRestaurants)
+}
+
+function renderStats(rests) {
+  const conGerente = rests.filter(r => allUsers.some(u => u.restaurant_id === r.id && u.role === 'gerente')).length
+  document.getElementById('s-total').textContent   = rests.length
+  document.getElementById('s-activos').textContent = rests.filter(r => r.active).length
+  document.getElementById('s-gerente').textContent = conGerente
+}
+
+function renderGrid(rests) {
+  if (rests.length === 0) {
+    document.getElementById('restaurants-grid').innerHTML =
+      '<div class="empty-state"><div class="empty-state-icon">🏪</div><div class="empty-state-title">Sin restaurantes</div><div class="empty-state-text">Crea el primer restaurante con el botón de arriba.</div></div>'
+    return
+  }
+
+  document.getElementById('restaurants-grid').innerHTML = rests.map(r => {
+    const staff    = allUsers.filter(u => u.restaurant_id === r.id)
+    const gerente  = staff.find(u => u.role === 'gerente')
+    const meseros  = staff.filter(u => u.role === 'mesero')
+
+    return `
+      <div class="card" style="margin-bottom:14px">
+        <div class="flex-between mb-16">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="width:42px;height:42px;background:var(--brand-light);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;font-size:20px">🏪</div>
+            <div>
+              <div style="font-size:16px;font-weight:600">${r.name}</div>
+              <div style="font-size:13px;color:var(--text-tertiary)">📍 ${r.address || 'Sin dirección'}</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="badge badge-active">Activo</span>
+            <button class="btn btn-ghost btn-sm btn-icon" onclick="openEditModal(${JSON.stringify(r).replace(/"/g,'&quot;')})">✏️</button>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+          <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px">
+            <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:3px">Gerente</div>
+            <div style="font-size:13.5px;font-weight:500">${gerente?.name || 'Sin asignar'}</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px">
+            <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:3px">Personal</div>
+            <div style="font-size:13.5px;font-weight:500">${staff.length} empleados</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px">
+            <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:3px">Meseros</div>
+            <div style="font-size:13.5px;font-weight:500">${meseros.length}</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-secondary btn-sm" style="flex:1">Ver detalles</button>
+          <button class="btn btn-ghost btn-sm" style="flex:1" onclick="openEditModal(${JSON.stringify(r).replace(/"/g,'&quot;')})">Configuración</button>
+        </div>
+      </div>`
+  }).join('')
+}
+
+function openCreateModal() {
+  document.getElementById('modal-rest-title').textContent = 'Crear restaurante'
+  document.getElementById('r-id').value = ''
+  document.getElementById('r-name').value = ''
+  document.getElementById('r-address').value = ''
+  showModal('modal-restaurant')
+}
+
+function openEditModal(r) {
+  document.getElementById('modal-rest-title').textContent = 'Editar restaurante'
+  document.getElementById('r-id').value = r.id
+  document.getElementById('r-name').value = r.name
+  document.getElementById('r-address').value = r.address || ''
+  showModal('modal-restaurant')
+}
+
+async function saveRestaurant() {
+  const id      = document.getElementById('r-id').value
+  const name    = document.getElementById('r-name').value.trim()
+  const address = document.getElementById('r-address').value.trim()
+
+  if (!name) { toast('El nombre es requerido', 'error'); return }
+
+  if (id) {
+    const { error } = await db.from('restaurants').update({ name, address }).eq('id', id)
+    if (error) { toast('Error al actualizar', 'error'); return }
+  } else {
+    const { error } = await db.from('restaurants').insert({ name, address })
+    if (error) { toast('Error al crear restaurante', 'error'); return }
+  }
+
+  hideModal('modal-restaurant')
+  toast(id ? 'Restaurante actualizado' : 'Restaurante creado')
+  await loadRestaurants()
+}
+
+init()
+</script>
+</body>
+</html>

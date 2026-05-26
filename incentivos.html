@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Incentivos — RestaurantOS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-placeholder"></div>
+  <div class="main-content">
+    <div class="topbar">
+      <div>
+        <div class="topbar-title">Incentivos</div>
+        <div class="topbar-subtitle">Concursos y metas de ventas</div>
+      </div>
+      <div class="topbar-actions" id="topbar-actions"></div>
+    </div>
+    <div class="page-body">
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('activos', this)">Activos</div>
+        <div class="tab" onclick="switchTab('ranking', this)">Ranking</div>
+        <div class="tab" onclick="switchTab('historial', this)">Historial</div>
+      </div>
+      <div id="tab-content">
+        <div class="loading-overlay"><div class="spinner"></div> Cargando...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal crear incentivo -->
+<div class="modal-overlay" id="modal-incentivo">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Crear incentivo</div>
+      <div class="modal-close" onclick="hideModal('modal-incentivo')">✕</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Título</label>
+      <input class="form-input" id="inc-title" placeholder="Ej. Concurso Febrero - Ventas Totales">
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Tipo</label>
+        <select class="form-select" id="inc-type">
+          <option value="ventas_totales">Ventas totales</option>
+          <option value="ticket_promedio">Ticket promedio</option>
+          <option value="combinado">Combinado</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Meta ($)</label>
+        <input class="form-input" id="inc-goal" type="number" placeholder="50000">
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Fecha inicio</label>
+        <input class="form-input" id="inc-start" type="date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Fecha fin</label>
+        <input class="form-input" id="inc-end" type="date">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Premio / Recompensa</label>
+      <input class="form-input" id="inc-prize" placeholder="Ej. Bonificación $5,000 pesos">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="hideModal('modal-incentivo')">Cancelar</button>
+      <button class="btn btn-primary" onclick="createIncentivo()">Crear incentivo</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase.js"></script>
+<script src="js/layout.js"></script>
+<script>
+let currentTab = 'activos'
+let allIncentivos = []
+
+async function init() {
+  await renderLayout('incentivos.html')
+  const user = Auth.getUser()
+
+  if (Auth.can(user, 'incentives')) {
+    document.getElementById('topbar-actions').innerHTML =
+      '<button class="btn btn-primary" onclick="showModal(\'modal-incentivo\')">+ Crear incentivo</button>'
+  }
+
+  await loadData()
+}
+
+async function loadData() {
+  const restaurantId = getActiveRestaurant()
+  if (!restaurantId) return
+  allIncentivos = await DB.getIncentives(restaurantId)
+  renderTab(currentTab)
+}
+
+function switchTab(tab, el) {
+  currentTab = tab
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'))
+  el.classList.add('active')
+  renderTab(tab)
+}
+
+function renderTab(tab) {
+  const activos   = allIncentivos.filter(i => i.active)
+  const inactivos = allIncentivos.filter(i => !i.active)
+
+  if (tab === 'activos') renderIncentivosCards(activos)
+  else if (tab === 'historial') renderIncentivosCards(inactivos, true)
+  else renderRanking()
+}
+
+function renderIncentivosCards(list, historial = false) {
+  if (list.length === 0) {
+    document.getElementById('tab-content').innerHTML =
+      `<div class="empty-state"><div class="empty-state-icon">🏆</div>
+       <div class="empty-state-title">${historial ? 'Sin historial' : 'Sin incentivos activos'}</div>
+       <div class="empty-state-text">${historial ? 'Los concursos finalizados aparecerán aquí.' : 'Crea el primer concurso con el botón de arriba.'}</div></div>`
+    return
+  }
+
+  const typeColors = {
+    ventas_totales: { bg: '#DBEAFE', color: '#1D4ED8', label: 'Ventas totales' },
+    ticket_promedio: { bg: '#D1FAE5', color: '#065F46', label: 'Ticket promedio' },
+    combinado: { bg: '#EDE9FE', color: '#5B21B6', label: 'Combinado' }
+  }
+
+  document.getElementById('tab-content').innerHTML = list.map(inc => {
+    const tc = typeColors[inc.type] || typeColors.combinado
+    const progress = inc.incentive_progress || []
+    const sorted = [...progress].sort((a, b) => b.current_amount - a.current_amount)
+    const best = sorted[0]
+    const pct = best && inc.goal_amount > 0
+      ? Math.min(100, (best.current_amount / inc.goal_amount) * 100) : 0
+
+    return `
+      <div class="card" style="margin-bottom:14px">
+        <div class="flex-between mb-8">
+          <div style="font-size:16px;font-weight:600">${inc.title}</div>
+          <span class="badge" style="background:${tc.bg};color:${tc.color}">${tc.label}</span>
+        </div>
+        <div style="font-size:13px;color:var(--text-tertiary);margin-bottom:14px">
+          📅 ${DateUtils.format(inc.start_date)} — ${DateUtils.format(inc.end_date)}
+        </div>
+        <div class="grid-2" style="gap:10px;margin-bottom:16px">
+          <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px 14px">
+            <div style="font-size:11px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:3px">Meta</div>
+            <div style="font-size:17px;font-weight:600">${DateUtils.formatMoney(inc.goal_amount)}</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px 14px">
+            <div style="font-size:11px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:3px">Premio</div>
+            <div style="font-size:14px;font-weight:500;color:var(--brand)">${inc.prize || '—'}</div>
+          </div>
+        </div>
+        <div style="margin-bottom:6px;font-size:12.5px;color:var(--text-secondary);font-weight:500">
+          Mejor progreso: ${pct.toFixed(0)}%
+        </div>
+        <div class="progress-bar"><div class="progress-fill ${pct > 80 ? 'green' : ''}" style="width:${pct}%"></div></div>
+        <div style="font-size:12px;color:var(--text-tertiary);margin-top:6px">
+          ${progress.length} participantes cumpliendo
+        </div>
+      </div>`
+  }).join('')
+}
+
+function renderRanking() {
+  const activos = allIncentivos.filter(i => i.active)
+  if (activos.length === 0) {
+    document.getElementById('tab-content').innerHTML =
+      '<div class="empty-state"><div class="empty-state-text">Sin incentivos activos para mostrar ranking</div></div>'
+    return
+  }
+
+  document.getElementById('tab-content').innerHTML = activos.map(inc => {
+    const progress = [...(inc.incentive_progress || [])].sort((a, b) => b.current_amount - a.current_amount)
+    const posClasses = ['gold', 'silver', 'bronze']
+
+    return `
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-header">
+          <div class="card-title">${inc.title}</div>
+          <div style="font-size:13px;color:var(--text-tertiary)">Meta: ${DateUtils.formatMoney(inc.goal_amount)}</div>
+        </div>
+        ${progress.length === 0
+          ? '<div class="empty-state"><div class="empty-state-text">Sin progreso registrado</div></div>'
+          : progress.map((p, i) => {
+              const pct = inc.goal_amount > 0 ? Math.min(100, (p.current_amount / inc.goal_amount) * 100) : 0
+              return `
+                <div class="ranking-item">
+                  <div class="ranking-pos ${posClasses[i] || ''}">${i+1}</div>
+                  <div class="ranking-info">
+                    <div class="ranking-name">${p.users?.name || 'Mesero'}</div>
+                    <div style="margin-top:5px">
+                      <div class="progress-bar"><div class="progress-fill ${pct > 80 ? 'green' : ''}" style="width:${pct}%"></div></div>
+                    </div>
+                  </div>
+                  <div class="ranking-value">${pct.toFixed(0)}%</div>
+                </div>`
+            }).join('')
+        }
+      </div>`
+  }).join('')
+}
+
+async function createIncentivo() {
+  const user = Auth.getUser()
+  const restaurantId = getActiveRestaurant()
+  const title = document.getElementById('inc-title').value.trim()
+  const type  = document.getElementById('inc-type').value
+  const goal  = parseFloat(document.getElementById('inc-goal').value)
+  const start = document.getElementById('inc-start').value
+  const end   = document.getElementById('inc-end').value
+  const prize = document.getElementById('inc-prize').value.trim()
+
+  if (!title || !goal || !start || !end) { toast('Completa todos los campos requeridos', 'error'); return }
+
+  const { data, error } = await DB.createIncentive({
+    restaurant_id: restaurantId,
+    title, type, goal_amount: goal,
+    start_date: start, end_date: end,
+    prize: prize || null,
+    created_by: user.id
+  })
+
+  if (error) { toast('Error al crear incentivo', 'error'); return }
+
+  hideModal('modal-incentivo')
+  toast('Incentivo creado correctamente')
+  await loadData()
+}
+
+init()
+</script>
+</body>
+</html>

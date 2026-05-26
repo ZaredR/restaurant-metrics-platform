@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reportes — RestaurantOS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/main.css">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-placeholder"></div>
+  <div class="main-content">
+    <div class="topbar">
+      <div>
+        <div class="topbar-title">Reportes</div>
+        <div class="topbar-subtitle">Carga y procesamiento de datos de ventas</div>
+      </div>
+    </div>
+    <div class="page-body">
+      <!-- Upload zone -->
+      <div class="card" style="margin-bottom:18px">
+        <div class="card-title" style="margin-bottom:4px">Subir nuevo reporte</div>
+        <div style="font-size:13px;color:var(--text-tertiary);margin-bottom:16px">
+          Sube archivos CSV o XLSX exportados desde SoftRestaurant
+        </div>
+        <div class="alert alert-info" style="margin-bottom:16px">
+          ℹ️ Los archivos deben contener las columnas: <strong>fecha, mesero_id, total_venta, numero_orden, ticket_promedio</strong>. Los datos duplicados se detectarán automáticamente.
+        </div>
+        <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()"
+             ondragover="event.preventDefault();this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')"
+             ondrop="handleDrop(event)">
+          <div class="upload-icon">📄</div>
+          <div class="upload-text">Haz clic para seleccionar un archivo</div>
+          <div class="upload-hint">CSV o XLSX (máx. 10MB)</div>
+        </div>
+        <input type="file" id="file-input" accept=".csv,.xlsx,.xls" style="display:none" onchange="handleFile(this.files[0])">
+
+        <!-- Progress -->
+        <div id="upload-progress" style="display:none;margin-top:16px">
+          <div class="flex-between mb-8">
+            <span style="font-size:13.5px;font-weight:500" id="progress-label">Procesando...</span>
+            <span style="font-size:13px;color:var(--text-tertiary)" id="progress-pct">0%</span>
+          </div>
+          <div class="progress-bar" style="height:8px">
+            <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:18px">
+        <div class="stat-card">
+          <div class="stat-label">Reportes procesados</div>
+          <div class="stat-value" id="s-reportes">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Registros totales</div>
+          <div class="stat-value" id="s-registros">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Este mes</div>
+          <div class="stat-value" id="s-mes">—</div>
+        </div>
+      </div>
+
+      <!-- History table -->
+      <div class="table-wrap">
+        <div style="padding:14px 18px;border-bottom:1px solid var(--border);font-size:14px;font-weight:600">
+          Historial de reportes
+          <span style="font-size:12px;font-weight:400;color:var(--text-tertiary);margin-left:6px">Archivos procesados recientemente</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Archivo</th>
+              <th>Fecha de carga</th>
+              <th>Cargado por</th>
+              <th>Registros</th>
+              <th>Estado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="reports-table">
+            <tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-tertiary)">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase.js"></script>
+<script src="js/layout.js"></script>
+<script>
+async function init() {
+  await renderLayout('reportes.html')
+  await loadReports()
+}
+
+async function loadReports() {
+  const restaurantId = getActiveRestaurant()
+  if (!restaurantId) return
+  const reports = await DB.getReports(restaurantId)
+  renderTable(reports)
+  renderStats(reports)
+}
+
+function renderStats(reports) {
+  const total = reports.length
+  const registros = reports.reduce((s, r) => s + (r.records_count || 0), 0)
+  const thisMonth = reports.filter(r => {
+    const d = new Date(r.created_at)
+    const now = new Date()
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+  }).length
+
+  document.getElementById('s-reportes').textContent = total
+  document.getElementById('s-registros').textContent = registros.toLocaleString('es-MX')
+  document.getElementById('s-mes').textContent = thisMonth
+}
+
+function renderTable(reports) {
+  if (reports.length === 0) {
+    document.getElementById('reports-table').innerHTML =
+      '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-tertiary)">Sin reportes cargados aún</td></tr>'
+    return
+  }
+
+  document.getElementById('reports-table').innerHTML = reports.map(r => `
+    <tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:18px">${r.filename.endsWith('.csv') ? '📄' : '📊'}</span>
+          <span style="font-weight:500">${r.filename}</span>
+        </div>
+      </td>
+      <td style="color:var(--text-secondary)">
+        ${new Date(r.created_at).toLocaleDateString('es-MX', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })}
+      </td>
+      <td>${r.users?.name || '—'}</td>
+      <td class="font-mono">${r.records_count?.toLocaleString('es-MX') || '—'}</td>
+      <td><span class="badge badge-${r.status}">${r.status === 'completed' ? 'Completado' : r.status === 'processing' ? 'Procesando' : 'Error'}</span></td>
+      <td>
+        <button class="btn btn-ghost btn-sm btn-icon" title="Descargar" style="font-size:16px">⬇️</button>
+      </td>
+    </tr>`).join('')
+}
+
+function handleDrop(e) {
+  e.preventDefault()
+  document.getElementById('upload-zone').classList.remove('drag-over')
+  const file = e.dataTransfer.files[0]
+  if (file) handleFile(file)
+}
+
+async function handleFile(file) {
+  if (!file) return
+  const allowed = ['.csv', '.xlsx', '.xls']
+  const ext = '.' + file.name.split('.').pop().toLowerCase()
+  if (!allowed.includes(ext)) { toast('Solo se permiten archivos CSV o XLSX', 'error'); return }
+  if (file.size > 10 * 1024 * 1024) { toast('El archivo no debe superar 10MB', 'error'); return }
+
+  const user = Auth.getUser()
+  const restaurantId = getActiveRestaurant()
+
+  // Show progress
+  document.getElementById('upload-progress').style.display = 'block'
+  document.getElementById('progress-label').textContent = 'Leyendo archivo...'
+  setProgress(10)
+
+  try {
+    // Leer archivo
+    const data = await readFile(file)
+    setProgress(40)
+    document.getElementById('progress-label').textContent = 'Validando columnas...'
+
+    const required = ['fecha', 'mesero_id', 'total_venta', 'numero_orden']
+    const cols = Object.keys(data[0] || {}).map(k => k.toLowerCase().trim())
+    const missing = required.filter(r => !cols.includes(r))
+
+    if (missing.length > 0) {
+      toast(`Faltan columnas: ${missing.join(', ')}`, 'error')
+      document.getElementById('upload-progress').style.display = 'none'
+      return
+    }
+
+    setProgress(60)
+    document.getElementById('progress-label').textContent = 'Guardando registro...'
+
+    // Crear registro en DB
+    const { data: report, error } = await db.from('reports').insert({
+      restaurant_id: restaurantId,
+      filename: file.name,
+      uploaded_by: user.id,
+      records_count: data.length,
+      status: 'completed'
+    }).select().single()
+
+    if (error) throw error
+
+    setProgress(80)
+    document.getElementById('progress-label').textContent = 'Procesando métricas...'
+
+    // Procesar y guardar métricas
+    await processMetrics(data, restaurantId, report.id)
+    setProgress(100)
+    document.getElementById('progress-label').textContent = '¡Completado!'
+
+    setTimeout(() => {
+      document.getElementById('upload-progress').style.display = 'none'
+      toast(`${data.length} registros procesados correctamente`)
+      loadReports()
+    }, 800)
+
+  } catch (err) {
+    console.error(err)
+    toast('Error al procesar el archivo', 'error')
+    document.getElementById('upload-progress').style.display = 'none'
+  }
+}
+
+function setProgress(pct) {
+  document.getElementById('progress-fill').style.width = pct + '%'
+  document.getElementById('progress-pct').textContent = pct + '%'
+}
+
+function readFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'binary', cellDates: true })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const data = XLSX.utils.sheet_to_json(ws, { defval: '' })
+        resolve(data)
+      } catch (err) { reject(err) }
+    }
+    reader.readAsBinaryString(file)
+  })
+}
+
+async function processMetrics(rows, restaurantId, reportId) {
+  // Normalizar columnas
+  const normalized = rows.map(r => {
+    const lower = {}
+    Object.keys(r).forEach(k => { lower[k.toLowerCase().trim()] = r[k] })
+    return lower
+  })
+
+  // Agrupar por mesero + fecha
+  const byWaiterDate = {}
+  normalized.forEach(row => {
+    const fecha = row.fecha instanceof Date
+      ? row.fecha.toISOString().split('T')[0]
+      : String(row.fecha).split('T')[0].split(' ')[0]
+    const key = `${row.mesero_id}__${fecha}`
+    if (!byWaiterDate[key]) {
+      byWaiterDate[key] = {
+        restaurant_id: restaurantId,
+        waiter_name: row.nombre_mesero || row.mesero || String(row.mesero_id),
+        metric_date: fecha,
+        total_sales: 0,
+        total_orders: 0,
+        upsell_amount: 0
+      }
+    }
+    byWaiterDate[key].total_sales   += parseFloat(row.total_venta || 0)
+    byWaiterDate[key].total_orders  += 1
+    byWaiterDate[key].upsell_amount += parseFloat(row.upsell || 0)
+  })
+
+  const upserts = Object.values(byWaiterDate).map(m => ({
+    ...m,
+    ticket_average: m.total_orders > 0 ? m.total_sales / m.total_orders : 0
+  }))
+
+  // Upsert en lotes de 100
+  for (let i = 0; i < upserts.length; i += 100) {
+    const batch = upserts.slice(i, i + 100)
+    await db.from('metrics_daily').upsert(batch, {
+      onConflict: 'restaurant_id,waiter_id,metric_date',
+      ignoreDuplicates: false
+    })
+  }
+}
+
+init()
+</script>
+</body>
+</html>

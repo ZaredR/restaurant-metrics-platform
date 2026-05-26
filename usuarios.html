@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Usuarios — RestaurantOS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-placeholder"></div>
+  <div class="main-content">
+    <div class="topbar">
+      <div>
+        <div class="topbar-title">Usuarios</div>
+        <div class="topbar-subtitle">Gestión de usuarios y permisos</div>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn btn-primary" onclick="openCreateModal()">+ Crear usuario</button>
+      </div>
+    </div>
+    <div class="page-body">
+      <!-- Stats -->
+      <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:18px">
+        <div class="stat-card"><div class="stat-label">Total usuarios</div><div class="stat-value" id="s-total">—</div></div>
+        <div class="stat-card"><div class="stat-label">Gerentes</div><div class="stat-value" id="s-gerentes">—</div></div>
+        <div class="stat-card"><div class="stat-label">Supervisores</div><div class="stat-value" id="s-supervisores">—</div></div>
+        <div class="stat-card"><div class="stat-label">Meseros</div><div class="stat-value" id="s-meseros">—</div></div>
+      </div>
+
+      <div class="table-wrap">
+        <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:14px;font-weight:600">Lista de usuarios</span>
+          <input class="form-input" style="width:220px;padding:6px 12px;font-size:13px" placeholder="🔍 Buscar..." oninput="filterTable(this.value)">
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Email</th>
+              <th>Rol</th>
+              <th>Restaurante</th>
+              <th>Estado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="users-table">
+            <tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-tertiary)">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal crear/editar usuario -->
+<div class="modal-overlay" id="modal-user">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-user-title">Crear usuario</div>
+      <div class="modal-close" onclick="hideModal('modal-user')">✕</div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Nombre completo</label>
+        <input class="form-input" id="u-name" placeholder="Juan Pérez">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="form-input" id="u-email" type="email" placeholder="juan@restaurant.com">
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">PIN de acceso</label>
+        <input class="form-input" id="u-pin" type="password" placeholder="••••" maxlength="10">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Rol</label>
+        <select class="form-select" id="u-role">
+          <option value="mesero">Mesero</option>
+          <option value="supervisor">Supervisor</option>
+          <option value="gerente">Gerente</option>
+          <option value="admin">Administrador</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Restaurante</label>
+      <select class="form-select" id="u-restaurant">
+        <option value="">Sin asignar</option>
+      </select>
+    </div>
+    <input type="hidden" id="u-id">
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="hideModal('modal-user')">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveUser()" id="btn-save-user">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase.js"></script>
+<script src="js/layout.js"></script>
+<script>
+let allUsers = []
+
+async function init() {
+  await renderLayout('usuarios.html')
+  await loadRestaurantOptions()
+  await loadUsers()
+}
+
+async function loadRestaurantOptions() {
+  const restaurants = await DB.getRestaurants()
+  const sel = document.getElementById('u-restaurant')
+  restaurants.forEach(r => {
+    const opt = document.createElement('option')
+    opt.value = r.id
+    opt.textContent = r.name
+    sel.appendChild(opt)
+  })
+}
+
+async function loadUsers() {
+  allUsers = await DB.getUsers()
+  renderStats(allUsers)
+  renderTable(allUsers)
+}
+
+function renderStats(users) {
+  document.getElementById('s-total').textContent       = users.length
+  document.getElementById('s-gerentes').textContent    = users.filter(u => u.role === 'gerente').length
+  document.getElementById('s-supervisores').textContent = users.filter(u => u.role === 'supervisor').length
+  document.getElementById('s-meseros').textContent     = users.filter(u => u.role === 'mesero').length
+}
+
+function renderTable(users) {
+  if (users.length === 0) {
+    document.getElementById('users-table').innerHTML =
+      '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-tertiary)">Sin usuarios</td></tr>'
+    return
+  }
+
+  document.getElementById('users-table').innerHTML = users.map(u => {
+    const initials = u.name.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase()
+    return `
+      <tr>
+        <td>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="avatar" style="width:32px;height:32px;font-size:12px">${initials}</div>
+            <span style="font-weight:500">${u.name}</span>
+          </div>
+        </td>
+        <td style="color:var(--text-secondary)">${u.email}</td>
+        <td><span class="badge badge-${u.role}">${u.role}</span></td>
+        <td style="color:var(--text-secondary)">${u.restaurants?.name || '—'}</td>
+        <td><span class="badge ${u.active ? 'badge-active' : 'badge-inactive'}">${u.active ? 'Activo' : 'Inactivo'}</span></td>
+        <td>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-ghost btn-sm btn-icon" onclick="openEditModal(${JSON.stringify(u).replace(/"/g, '&quot;')})" title="Editar">✏️</button>
+            <button class="btn btn-danger btn-sm btn-icon" onclick="deleteUser('${u.id}','${u.name}')" title="Desactivar">🗑️</button>
+          </div>
+        </td>
+      </tr>`
+  }).join('')
+}
+
+function filterTable(q) {
+  const filtered = allUsers.filter(u =>
+    u.name.toLowerCase().includes(q.toLowerCase()) ||
+    u.email.toLowerCase().includes(q.toLowerCase()) ||
+    u.role.toLowerCase().includes(q.toLowerCase())
+  )
+  renderTable(filtered)
+}
+
+function openCreateModal() {
+  document.getElementById('modal-user-title').textContent = 'Crear usuario'
+  document.getElementById('u-id').value    = ''
+  document.getElementById('u-name').value  = ''
+  document.getElementById('u-email').value = ''
+  document.getElementById('u-pin').value   = ''
+  document.getElementById('u-role').value  = 'mesero'
+  document.getElementById('u-restaurant').value = ''
+  showModal('modal-user')
+}
+
+function openEditModal(user) {
+  document.getElementById('modal-user-title').textContent = 'Editar usuario'
+  document.getElementById('u-id').value    = user.id
+  document.getElementById('u-name').value  = user.name
+  document.getElementById('u-email').value = user.email
+  document.getElementById('u-pin').value   = ''
+  document.getElementById('u-role').value  = user.role
+  document.getElementById('u-restaurant').value = user.restaurant_id || ''
+  showModal('modal-user')
+}
+
+async function saveUser() {
+  const id    = document.getElementById('u-id').value
+  const name  = document.getElementById('u-name').value.trim()
+  const email = document.getElementById('u-email').value.trim()
+  const pin   = document.getElementById('u-pin').value.trim()
+  const role  = document.getElementById('u-role').value
+  const restaurant_id = document.getElementById('u-restaurant').value || null
+
+  if (!name || !email) { toast('Nombre y email son requeridos', 'error'); return }
+
+  const btn = document.getElementById('btn-save-user')
+  btn.disabled = true
+  btn.textContent = 'Guardando...'
+
+  let result
+  if (id) {
+    const payload = { name, email, role, restaurant_id }
+    if (pin) payload.pin = pin
+    result = await DB.updateUser(id, payload)
+  } else {
+    if (!pin) { toast('El PIN es requerido para nuevos usuarios', 'error'); btn.disabled = false; btn.textContent = 'Guardar'; return }
+    result = await DB.createUser({ name, email, pin, role, restaurant_id })
+  }
+
+  btn.disabled = false
+  btn.textContent = 'Guardar'
+
+  if (result.error) { toast('Error al guardar usuario', 'error'); return }
+
+  hideModal('modal-user')
+  toast(id ? 'Usuario actualizado' : 'Usuario creado correctamente')
+  await loadUsers()
+}
+
+async function deleteUser(id, name) {
+  if (!confirm(`¿Desactivar al usuario "${name}"?`)) return
+  const { error } = await DB.deleteUser(id)
+  if (error) { toast('Error al desactivar usuario', 'error'); return }
+  toast('Usuario desactivado')
+  await loadUsers()
+}
+
+init()
+</script>
+</body>
+</html>
