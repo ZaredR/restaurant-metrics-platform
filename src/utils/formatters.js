@@ -7,8 +7,11 @@ export const number = (v, decimals = 0) =>
 export const percent = (v, decimals = 1) =>
   `${Number(v ?? 0).toFixed(decimals)}%`
 
+// 'YYYY-MM-DD' alone is parsed as UTC by new Date(), which shows the previous day in Mexico.
+const toDate = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? new Date(`${v}T00:00:00`) : new Date(v))
+
 export const date = (v) =>
-  v ? new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' }).format(new Date(v)) : '—'
+  v ? new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium' }).format(toDate(v)) : '—'
 
 export const datetime = (v) =>
   v ? new Intl.DateTimeFormat('es-MX', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(v)) : '—'

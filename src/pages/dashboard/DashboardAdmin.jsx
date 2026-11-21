@@ -5,7 +5,7 @@ import {
 } from 'recharts'
 import KPICard from '../../components/ui/KPICard'
 import { currency, number } from '../../utils/formatters'
-import { ROUTES } from '../../constants/routes'
+import { ROUTES, isHiddenRoute } from '../../constants/routes'
 
 /* ── Mock data (replaced by Supabase queries) ────────── */
 const kpis = [
@@ -66,7 +66,7 @@ export default function DashboardAdmin() {
           <h1 className="page-title">Dashboard</h1>
           <p className="page-subtitle">Resumen general · Mayo 2026</p>
         </div>
-        <div className="page-actions">
+        {!isHiddenRoute(ROUTES.REPORT_UPLOAD) && <div className="page-actions">
           <Link to={ROUTES.REPORT_UPLOAD} className="btn btn-primary">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -74,7 +74,7 @@ export default function DashboardAdmin() {
             </svg>
             Subir reporte
           </Link>
-        </div>
+        </div>}
       </div>
 
       {/* KPI Cards */}

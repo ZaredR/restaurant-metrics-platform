@@ -30,4 +30,25 @@ export const ROUTES = {
   CONFIG:           '/config',
   PROFILE:          '/profile',
   AUDIT:            '/audit',
+  /* Gestión operativa */
+  STAFF:            '/staff',
+  FLOOR:            '/floor',
+  ABSENCES:         '/absences',
+  SCHEDULES:        '/schedules',
+  ROSTER:           '/roster',
+  HOSTESS:          '/hostess',
 }
+
+/* Old-version screens hidden in the operational version: they don't
+   show in the menu and their URLs redirect to the dashboard. The code
+   stays; remove a path from here to show it again. */
+export const HIDDEN_ROUTES = [
+  ROUTES.RESTAURANTS,
+  ROUTES.USERS,
+  ROUTES.REPORTS,
+  ROUTES.HISTORY,
+  ROUTES.CONFIG,
+]
+
+export const isHiddenRoute = (path) =>
+  HIDDEN_ROUTES.some((hidden) => path === hidden || path.startsWith(`${hidden}/`))

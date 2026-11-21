@@ -1,8 +1,8 @@
-import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
+import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../store/auth.store'
 import { PERMISSIONS } from '../constants/permissions'
 import AppLayout from '../components/layout/AppLayout'
-import { ROUTES } from '../constants/routes'
+import { ROUTES, isHiddenRoute } from '../constants/routes'
 
 /* ── Lazy pages ─────────────────────────────────────── */
 import { lazy, Suspense } from 'react'
@@ -26,6 +26,12 @@ const History          = lazy(() => import('../pages/history/History'))
 const Config           = lazy(() => import('../pages/config/Config'))
 const Profile          = lazy(() => import('../pages/profile/Profile'))
 const Audit            = lazy(() => import('../pages/audit/Audit'))
+const StaffList        = lazy(() => import('../pages/staff/StaffList'))
+const FloorConfig      = lazy(() => import('../pages/floor/FloorConfig'))
+const AbsenceList      = lazy(() => import('../pages/absences/AbsenceList'))
+const WeeklySchedule   = lazy(() => import('../pages/schedules/WeeklySchedule'))
+const DailyRoster      = lazy(() => import('../pages/roster/DailyRoster'))
+const HostessDesk      = lazy(() => import('../pages/hostess/HostessDesk'))
 
 /* ── Guards ─────────────────────────────────────────── */
 function RequireAuth() {
@@ -37,6 +43,13 @@ function RequireAuth() {
 function RequirePermission({ permission }) {
   const hasPermission = useAuthStore(s => s.hasPermission)
   if (!hasPermission(permission)) return <Navigate to={ROUTES.DASHBOARD} replace />
+  return <Outlet />
+}
+
+/* Old-version screens kept in code but not reachable (see HIDDEN_ROUTES). */
+function RedirectHidden() {
+  const { pathname } = useLocation()
+  if (isHiddenRoute(pathname)) return <Navigate to={ROUTES.DASHBOARD} replace />
   return <Outlet />
 }
 
@@ -69,6 +82,7 @@ export default function AppRouter() {
 
         {/* Protected */}
         <Route element={<RequireAuth />}>
+          <Route element={<RedirectHidden />}>
           <Route element={<AppLayout />}>
             <Route index element={<Navigate to={ROUTES.DASHBOARD} replace />} />
             <Route path={ROUTES.DASHBOARD} element={<Dashboard />} />
@@ -111,6 +125,27 @@ export default function AppRouter() {
             <Route element={<RequirePermission permission={PERMISSIONS.VIEW_AUDIT} />}>
               <Route path={ROUTES.AUDIT} element={<Audit />} />
             </Route>
+
+            {/* Gestión operativa */}
+            <Route element={<RequirePermission permission={PERMISSIONS.VIEW_STAFF} />}>
+              <Route path={ROUTES.STAFF} element={<StaffList />} />
+            </Route>
+            <Route element={<RequirePermission permission={PERMISSIONS.VIEW_FLOOR} />}>
+              <Route path={ROUTES.FLOOR} element={<FloorConfig />} />
+            </Route>
+            <Route element={<RequirePermission permission={PERMISSIONS.VIEW_SCHEDULES} />}>
+              <Route path={ROUTES.SCHEDULES} element={<WeeklySchedule />} />
+            </Route>
+            <Route element={<RequirePermission permission={PERMISSIONS.MANAGE_SCHEDULES} />}>
+              <Route path={ROUTES.ABSENCES} element={<AbsenceList />} />
+            </Route>
+            <Route element={<RequirePermission permission={PERMISSIONS.VIEW_ROSTER} />}>
+              <Route path={ROUTES.ROSTER} element={<DailyRoster />} />
+            </Route>
+            <Route element={<RequirePermission permission={PERMISSIONS.HOSTESS_DESK} />}>
+              <Route path={ROUTES.HOSTESS} element={<HostessDesk />} />
+            </Route>
+          </Route>
           </Route>
         </Route>
 

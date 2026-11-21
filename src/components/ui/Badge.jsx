@@ -22,6 +22,10 @@ export function RoleBadge({ role }) {
     gerente:    { label: 'Gerente',      variant: 'brand' },
     supervisor: { label: 'Supervisor',   variant: 'info' },
     mesero:     { label: 'Mesero',       variant: 'neutral' },
+    capitan:    { label: 'Capitán',      variant: 'info' },
+    hostess:    { label: 'Hostess',      variant: 'warning' },
+    runner:     { label: 'Runner',       variant: 'neutral' },
+    rrhh:       { label: 'RR. HH.',      variant: 'success' },
   }
   const cfg = map[role] ?? { label: role, variant: 'neutral' }
   return <Badge variant={cfg.variant}>{cfg.label}</Badge>

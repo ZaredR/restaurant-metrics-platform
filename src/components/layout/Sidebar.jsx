@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import { useAuthStore } from '../../store/auth.store'
-import { ROUTES } from '../../constants/routes'
+import { ROUTES, isHiddenRoute } from '../../constants/routes'
 import { PERMISSIONS } from '../../constants/permissions'
 import Avatar from '../ui/Avatar'
 
@@ -27,6 +27,12 @@ const icons = {
   audit:       'M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
   logout:      'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9',
   chevron:     'M15 18l-6-6 6-6',
+  staff:       'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M19 8v6 M22 11h-6',
+  floor:       'M3 3h7v7H3z M14 3h7v7h-7z M14 14h7v7h-7z M3 14h7v7H3z',
+  hostess:     'M3 11h18 M5 11V8a7 7 0 0 1 14 0v3 M12 4V2 M2 15h20 M6 15v6 M18 15v6',
+  roster:      'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2 M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2 2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2z M9 12h6 M9 16h6',
+  schedules:   'M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
+  absences:    'M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M3 10h18 M9.5 14.5l5 5 M14.5 14.5l-5 5',
 }
 
 const NAV_GROUPS = [
@@ -42,6 +48,17 @@ const NAV_GROUPS = [
       { to: ROUTES.RESTAURANTS, label: 'Restaurantes', icon: 'restaurants', permission: PERMISSIONS.VIEW_RESTAURANTS },
       { to: ROUTES.USERS,       label: 'Usuarios',     icon: 'users',       permission: PERMISSIONS.VIEW_USERS },
       { to: ROUTES.REPORTS,     label: 'Reportes',     icon: 'reports',     permission: PERMISSIONS.UPLOAD_REPORTS },
+    ],
+  },
+  {
+    label: 'Operación',
+    items: [
+      { to: ROUTES.STAFF, label: 'Personal', icon: 'staff', permission: PERMISSIONS.VIEW_STAFF },
+      { to: ROUTES.FLOOR, label: 'Local',    icon: 'floor', permission: PERMISSIONS.VIEW_FLOOR },
+      { to: ROUTES.HOSTESS,   label: 'Hostess',    icon: 'hostess',  permission: PERMISSIONS.HOSTESS_DESK },
+      { to: ROUTES.ROSTER,    label: 'Rol diario', icon: 'roster',   permission: PERMISSIONS.VIEW_ROSTER },
+      { to: ROUTES.SCHEDULES, label: 'Horarios',  icon: 'schedules', permission: PERMISSIONS.VIEW_SCHEDULES },
+      { to: ROUTES.ABSENCES,  label: 'Ausencias', icon: 'absences',  permission: PERMISSIONS.MANAGE_SCHEDULES },
     ],
   },
   {
@@ -126,7 +143,7 @@ export default function Sidebar({ collapsed, onToggle }) {
         <nav className="sidebar-nav">
           {NAV_GROUPS.map((group) => {
             const visible = group.items.filter(
-              (item) => item.permission == null || hasPermission(item.permission)
+              (item) => !isHiddenRoute(item.to) && (item.permission == null || hasPermission(item.permission))
             )
             if (visible.length === 0) return null
             return (

@@ -15,6 +15,12 @@ const routeLabels = {
   '/config':      'Configuración',
   '/profile':     'Mi Perfil',
   '/audit':       'Auditoría',
+  '/staff':       'Personal',
+  '/floor':       'Local',
+  '/schedules':   'Horarios',
+  '/absences':    'Ausencias',
+  '/roster':      'Rol diario',
+  '/hostess':     'Hostess',
 }
 
 export default function Topbar({ collapsed }) {
