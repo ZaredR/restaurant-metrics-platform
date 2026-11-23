@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import TodaySummary from './TodaySummary'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -76,6 +77,8 @@ export default function DashboardAdmin() {
           </Link>
         </div>}
       </div>
+
+      <TodaySummary />
 
       {/* KPI Cards */}
       <div className="grid-kpi">

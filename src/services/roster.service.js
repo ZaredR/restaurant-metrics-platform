@@ -58,7 +58,23 @@ export async function getPreviousStations(fecha, turnoId) {
   return new Map(last.filter((a) => a.funcion === 'mesero').map((a) => [a.empleado_id, a.estacion_id]))
 }
 
-/* `motivo` is required when the roster is published (see needsReason). */
+/* What to review before publishing: absences, schedule, restrictions, coverage (managers only). */
+export function getConflicts(rolId) {
+  return run((sb) => sb.rpc('conflictos_rol', { p_rol_id: rolId }))
+}
+
+/* Assignments made despite a restriction, with their reason. */
+export function listExceptions(rolId) {
+  return run((sb) =>
+    sb.from('rol_excepciones')
+      .select('id, empleado_id, advertencias, motivo, usuario_nombre, created_at')
+      .eq('rol_id', rolId)
+      .order('created_at', { ascending: false })
+  )
+}
+
+/* `motivo` is required when the roster is published (see needsReason), or to
+   assign someone despite a restriction (error RA001). It goes through rol_ajustar(). */
 export function addAssignments(rows, motivo) {
   if (motivo) {
     return Promise.all(rows.map((row) =>

@@ -1,5 +1,19 @@
 import { run } from './db'
 
+/* Operational state of a table; "ocupada" is not stored, it comes from the seated visit. */
+export const ESTADOS_MESA = {
+  disponible:     { label: 'Disponible',        variant: 'success' },
+  reservada:      { label: 'Reservada',         variant: 'info' },
+  en_limpieza:    { label: 'En limpieza',       variant: 'purple' },
+  fuera_servicio: { label: 'Fuera de servicio', variant: 'danger' },
+  cerrada:        { label: 'Cerrada',           variant: 'neutral' },
+}
+
+/* Hostess, captain, supervisor and management; blocked while the table is occupied. */
+export function setTableState(mesaId, estado) {
+  return run((sb) => sb.rpc('cambiar_estado_mesa', { p_mesa_id: mesaId, p_estado: estado }))
+}
+
 /* ─── Catálogo del local: áreas, estaciones y mesas ────────── */
 
 export function listAreas() {
@@ -26,7 +40,7 @@ export function saveStation({ id, ...fields }) {
 export function listTables() {
   return run((sb) =>
     sb.from('mesas')
-      .select('id, numero, capacidad, activo, estacion_id, estacion:estaciones(nombre, area:areas(nombre))')
+      .select('id, numero, capacidad, activo, estado, estacion_id, estacion:estaciones(nombre, area:areas(nombre))')
       .order('numero')
   )
 }

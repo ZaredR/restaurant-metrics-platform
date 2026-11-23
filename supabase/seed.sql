@@ -189,3 +189,26 @@ insert into public.reglas_alerta (nombre, tipo, umbral, periodo_dias) values
   ('Promedio de encuesta bajo por mesero', 'promedio_encuesta_mesero', 3.5, 7),
   ('Respuesta crítica en encuesta',        'respuesta_critica',        2,   1),
   ('Carga alta de comensales por área',    'carga_area',               60,  1);
+
+/* ─── Disponibilidad: dónde puede trabajar cada quien y restricciones ── */
+
+-- Ana Martínez atiende solo la terraza; Luis Mora solo trabaja el vespertino.
+insert into public.empleado_autorizaciones (empleado_id, area_id)
+select e.id, a.id from public.empleados e, public.areas a
+where e.numero_empleado = 'E009' and a.nombre = 'Terraza';
+
+insert into public.empleado_restricciones (empleado_id, tipo, turno_id, fecha_inicio, fecha_fin, descripcion)
+select e.id, x.tipo, t.id, x.inicio, x.fin, x.descripcion
+from (values
+  ('E013', 'solo_turno',   'Vespertino', null::date,         null::date,          null),
+  ('E011', 'capacitacion', null,         current_date - 3,   current_date + 14,   'Acompañar con un mesero con experiencia'),
+  ('E012', 'no_cierre',    null,         null,               null,                null)
+) as x(num, tipo, turno, inicio, fin, descripcion)
+join public.empleados e on e.numero_empleado = x.num
+left join public.turnos t on t.nombre = x.turno;
+
+-- Una alta en proceso: no aparece disponible para el rol.
+update public.empleados set estado = 'pendiente_alta' where numero_empleado = 'E016';
+
+-- Una mesa fuera de servicio para ver el estado en la hostess.
+update public.mesas set estado = 'fuera_servicio' where numero = 44;

@@ -30,6 +30,9 @@ const icons = {
   staff:       'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M19 8v6 M22 11h-6',
   floor:       'M3 3h7v7H3z M14 3h7v7h-7z M14 14h7v7h-7z M3 14h7v7H3z',
   hostess:     'M3 11h18 M5 11V8a7 7 0 0 1 14 0v3 M12 4V2 M2 15h20 M6 15v6 M18 15v6',
+  alerts:      'M12 9v4 M12 17h.01 M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
+  surveys:     'M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
+  closing:     'M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6',
   roster:      'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2 M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2 2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2z M9 12h6 M9 16h6',
   schedules:   'M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
   absences:    'M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M3 10h18 M9.5 14.5l5 5 M14.5 14.5l-5 5',
@@ -57,6 +60,9 @@ const NAV_GROUPS = [
       { to: ROUTES.FLOOR, label: 'Local',    icon: 'floor', permission: PERMISSIONS.VIEW_FLOOR },
       { to: ROUTES.HOSTESS,   label: 'Hostess',    icon: 'hostess',  permission: PERMISSIONS.HOSTESS_DESK },
       { to: ROUTES.ROSTER,    label: 'Rol diario', icon: 'roster',   permission: PERMISSIONS.VIEW_ROSTER },
+      { to: ROUTES.CLOSING,   label: 'Cierre',     icon: 'closing',  permission: PERMISSIONS.VIEW_CLOSING },
+      { to: ROUTES.SURVEYS,   label: 'Encuestas',  icon: 'surveys',  permission: PERMISSIONS.CAPTURE_SURVEYS },
+      { to: ROUTES.ALERTS,    label: 'Alertas',    icon: 'alerts',   permission: PERMISSIONS.VIEW_ALERTS },
       { to: ROUTES.SCHEDULES, label: 'Horarios',  icon: 'schedules', permission: PERMISSIONS.VIEW_SCHEDULES },
       { to: ROUTES.ABSENCES,  label: 'Ausencias', icon: 'absences',  permission: PERMISSIONS.MANAGE_SCHEDULES },
     ],
@@ -64,7 +70,7 @@ const NAV_GROUPS = [
   {
     label: 'Rendimiento',
     items: [
-      { to: ROUTES.METRICS,    label: 'Métricas',   icon: 'metrics',    permission: null },
+      { to: ROUTES.METRICS,    label: 'Métricas',   icon: 'metrics',    permission: PERMISSIONS.VIEW_METRICS },
       { to: ROUTES.RANKINGS,   label: 'Rankings',   icon: 'rankings',   permission: null },
       { to: ROUTES.INCENTIVES, label: 'Incentivos', icon: 'incentives', permission: null },
       { to: ROUTES.NOTICES,    label: 'Avisos',     icon: 'notices',    permission: null },
@@ -75,6 +81,7 @@ const NAV_GROUPS = [
     label: 'Sistema',
     items: [
       { to: ROUTES.CONFIG,  label: 'Configuración', icon: 'config',  permission: PERMISSIONS.VIEW_CONFIG },
+      { to: ROUTES.ACCOUNTS, label: 'Usuarios',     icon: 'users',   permission: PERMISSIONS.MANAGE_USERS },
       { to: ROUTES.PROFILE, label: 'Mi perfil',     icon: 'profile', permission: null },
       { to: ROUTES.AUDIT,   label: 'Auditoría',     icon: 'audit',   permission: PERMISSIONS.VIEW_AUDIT },
     ],
@@ -114,20 +121,14 @@ export default function Sidebar({ collapsed, onToggle }) {
         }}
       >
         {/* Brand */}
-        <div className="sidebar-brand">
-          <div className="sidebar-logo">
-            <svg width="24" height="24" viewBox="0 0 32 32" fill="none">
-              <rect width="32" height="32" rx="8" fill="var(--color-brand)"/>
-              <path d="M8 22V14l8-6 8 6v8" stroke="#0F172A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <rect x="13" y="16" width="6" height="6" rx="1" fill="#0F172A"/>
-            </svg>
+        <div className={`sidebar-brand ${collapsed ? 'sidebar-brand--collapsed' : ''}`}>
+          {/* OmniRest logo; collapsed shows the chef-hat icon. */}
+          <div className={`sidebar-logo ${collapsed ? 'sidebar-logo--icon' : ''}`}>
+            {collapsed
+              ? <img src="/omnirest-icon.png" alt="OmniRest" className="sidebar-logo-img" />
+              : <img src="/omnirest-logo.jpg" alt="OmniRest — Gestión Operativa para Restaurantes" className="sidebar-logo-img" />}
           </div>
-          {!collapsed && (
-            <div className="sidebar-brand-text">
-              <span className="sidebar-brand-name">Métricas</span>
-              <span className="sidebar-brand-sub">Restaurantes</span>
-            </div>
-          )}
+          {!collapsed && <div className="sidebar-brand-text" />}
           <button className="sidebar-collapse-btn" onClick={onToggle} title={collapsed ? 'Expandir' : 'Colapsar'}>
             <svg
               width="16" height="16" viewBox="0 0 24 24" fill="none"

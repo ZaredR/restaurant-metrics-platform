@@ -25,12 +25,7 @@ export default function RecoverPassword() {
     <div className="auth-page">
       <div className="auth-left">
         <div className="auth-brand">
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-            <rect width="32" height="32" rx="10" fill="var(--color-brand)"/>
-            <path d="M8 22V14l8-6 8 6v8" stroke="#0F172A" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
-            <rect x="13" y="16" width="6" height="6" rx="1" fill="#0F172A"/>
-          </svg>
-          <span className="auth-brand-name">Métricas Restaurantes</span>
+          <img src="/omnirest-logo.jpg" alt="OmniRest — Gestión Operativa para Restaurantes" className="auth-logo" />
         </div>
 
         <div className="auth-card">

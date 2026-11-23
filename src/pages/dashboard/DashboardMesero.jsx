@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import TodaySummary from './TodaySummary'
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import KPICard from '../../components/ui/KPICard'
 import { currency, number, percent } from '../../utils/formatters'
@@ -43,6 +44,8 @@ export default function DashboardMesero() {
           <p className="page-subtitle">Tu rendimiento personal · Mayo 2026</p>
         </div>
       </div>
+
+      <TodaySummary />
 
       <div className="grid-kpi">
         {kpis.map((kpi) => (

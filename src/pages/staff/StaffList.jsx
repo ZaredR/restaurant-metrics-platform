@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import DataTable from '../../components/ui/DataTable'
-import Badge, { StatusBadge } from '../../components/ui/Badge'
+import Badge from '../../components/ui/Badge'
 import Button from '../../components/ui/Button'
 import Modal from '../../components/ui/Modal'
 import Alert from '../../components/ui/Alert'
@@ -8,11 +8,13 @@ import { useAuthStore } from '../../store/auth.store'
 import { PERMISSIONS } from '../../constants/permissions'
 import { useLoader } from '../../hooks/useLoader'
 import { listEmployees, saveEmployee, setEmployeeActive, PUESTOS, puestoLabel } from '../../services/staff.service'
+import { ESTADOS_EMPLEADO } from '../../services/availability.service'
+import AvailabilityModal from './AvailabilityModal'
 import { date } from '../../utils/formatters'
 
 const EMPTY = {
   numero_empleado: '', nombre: '', apellidos: '', puesto: 'mesero',
-  telefono: '', email: '', fecha_ingreso: '', activo: true,
+  telefono: '', email: '', fecha_ingreso: '', estado: 'activo',
 }
 
 const puestoVariant = {
@@ -31,6 +33,7 @@ export default function StaffList() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
   const [actionError, setActionError] = useState('')
+  const [availabilityOf, setAvailabilityOf] = useState(null)
 
   const rows = useMemo(() => employees
     .filter((e) => showInactive || e.activo)
@@ -83,18 +86,26 @@ export default function StaffList() {
       render: (r) => <Badge variant={puestoVariant[r.puesto]}>{puestoLabel(r.puesto)}</Badge> },
     { header: 'Teléfono', accessor: 'telefono' },
     { header: 'Ingreso',  accessor: 'fecha_ingreso', sortable: true, render: (r) => date(r.fecha_ingreso) },
-    { header: 'Estado',   accessor: 'activo', render: (r) => <StatusBadge active={r.activo} /> },
-    ...(canManage ? [{
+    { header: 'Estado',   accessor: 'estado', sortable: true, render: (r) => {
+      const e = ESTADOS_EMPLEADO[r.estado] ?? ESTADOS_EMPLEADO.activo
+      return <Badge variant={e.variant}>{e.label}</Badge>
+    } },
+    {
       header: 'Acciones', key: 'actions',
       render: (r) => (
         <div className="table-actions">
-          <Button variant="ghost" size="sm" onClick={() => openForm(r)}>Editar</Button>
-          <Button variant="ghost" size="sm" onClick={() => toggleActive(r)}>
-            {r.activo ? 'Desactivar' : 'Activar'}
-          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setAvailabilityOf(r)}>Disponibilidad</Button>
+          {canManage && (
+            <>
+              <Button variant="ghost" size="sm" onClick={() => openForm(r)}>Editar</Button>
+              <Button variant="ghost" size="sm" onClick={() => toggleActive(r)}>
+                {r.activo ? 'Desactivar' : 'Activar'}
+              </Button>
+            </>
+          )}
         </div>
       ),
-    }] : []),
+    },
   ]
 
   const activeCount = employees.filter((e) => e.activo).length
@@ -135,7 +146,7 @@ export default function StaffList() {
             </select>
             <label className="text-sm" style={{ display: 'flex', gap: 6, alignItems: 'center', whiteSpace: 'nowrap' }}>
               <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
-              Mostrar inactivos
+              Mostrar no activos
             </label>
           </div>
         }
@@ -189,10 +200,19 @@ export default function StaffList() {
                 <label className="form-label">Fecha de ingreso</label>
                 <input className="form-input" type="date" value={form.fecha_ingreso} onChange={set('fecha_ingreso')} />
               </div>
+              <div className="form-group">
+                <label className="form-label">Estado</label>
+                <select className="form-select" value={form.estado} onChange={set('estado')}>
+                  {Object.entries(ESTADOS_EMPLEADO).map(([value, e]) => <option key={value} value={value}>{e.label}</option>)}
+                </select>
+                <p className="text-sm text-muted" style={{ marginTop: 4 }}>Solo el personal activo se puede asignar al rol.</p>
+              </div>
             </div>
           </form>
         )}
       </Modal>
+
+      <AvailabilityModal employee={availabilityOf} canManage={canManage} onClose={() => setAvailabilityOf(null)} />
     </div>
   )
 }

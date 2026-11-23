@@ -1,5 +1,6 @@
 import { getSupabase } from './supabase'
 import { ROLES } from '../constants/roles'
+import { ROUTES } from '../constants/routes'
 
 /* ─── Auth service ─────────────────────────────────────────
    All Supabase auth calls live here. The store calls these
@@ -18,7 +19,16 @@ export async function loginWithEmail(email, password) {
     .eq('id', data.user.id)
     .single()
 
-  if (profileError) throw profileError
+  if (profileError) {
+    await sb.auth.signOut()
+    throw new Error('Tu cuenta todavía no tiene perfil. Pide a gerencia que te dé de alta en Usuarios.')
+  }
+
+  // Deactivated users keep their history but can't sign in.
+  if (!profile.activo) {
+    await sb.auth.signOut()
+    throw new Error('Tu acceso está desactivado. Habla con gerencia.')
+  }
 
   return {
     user: {
@@ -37,7 +47,7 @@ export async function loginWithEmail(email, password) {
 export async function recoverPassword(email) {
   const sb = getSupabase()
   const { error } = await sb.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/reset-password`,
+    redirectTo: `${window.location.origin}${ROUTES.RESET_PASSWORD}`,
   })
   if (error) throw error
 }

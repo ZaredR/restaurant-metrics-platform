@@ -32,6 +32,11 @@ const AbsenceList      = lazy(() => import('../pages/absences/AbsenceList'))
 const WeeklySchedule   = lazy(() => import('../pages/schedules/WeeklySchedule'))
 const DailyRoster      = lazy(() => import('../pages/roster/DailyRoster'))
 const HostessDesk      = lazy(() => import('../pages/hostess/HostessDesk'))
+const ShiftClosing     = lazy(() => import('../pages/closing/ShiftClosing'))
+const SurveysPage      = lazy(() => import('../pages/surveys/SurveysPage'))
+const AlertsPage       = lazy(() => import('../pages/alerts/AlertsPage'))
+const AccountsPage     = lazy(() => import('../pages/accounts/AccountsPage'))
+const ResetPassword    = lazy(() => import('../pages/auth/ResetPassword'))
 
 /* ── Guards ─────────────────────────────────────────── */
 function RequireAuth() {
@@ -79,6 +84,8 @@ export default function AppRouter() {
           <Route path={ROUTES.LOGIN}   element={<Login />} />
           <Route path={ROUTES.RECOVER} element={<RecoverPassword />} />
         </Route>
+        {/* Link of the recovery email: open with or without a session in the app */}
+        <Route path={ROUTES.RESET_PASSWORD} element={<ResetPassword />} />
 
         {/* Protected */}
         <Route element={<RequireAuth />}>
@@ -87,7 +94,9 @@ export default function AppRouter() {
             <Route index element={<Navigate to={ROUTES.DASHBOARD} replace />} />
             <Route path={ROUTES.DASHBOARD} element={<Dashboard />} />
             <Route path={ROUTES.PROFILE}   element={<Profile />} />
-            <Route path={ROUTES.METRICS}   element={<MetricsDashboard />} />
+            <Route element={<RequirePermission permission={PERMISSIONS.VIEW_METRICS} />}>
+              <Route path={ROUTES.METRICS} element={<MetricsDashboard />} />
+            </Route>
             <Route path={ROUTES.RANKINGS}  element={<RankingGeneral />} />
             <Route path={ROUTES.INCENTIVES}element={<IncentiveList />} />
             <Route path={ROUTES.INCENTIVE_NEW}  element={<IncentiveForm />} />
@@ -144,6 +153,18 @@ export default function AppRouter() {
             </Route>
             <Route element={<RequirePermission permission={PERMISSIONS.HOSTESS_DESK} />}>
               <Route path={ROUTES.HOSTESS} element={<HostessDesk />} />
+            </Route>
+            <Route element={<RequirePermission permission={PERMISSIONS.VIEW_CLOSING} />}>
+              <Route path={ROUTES.CLOSING} element={<ShiftClosing />} />
+            </Route>
+            <Route element={<RequirePermission permission={PERMISSIONS.CAPTURE_SURVEYS} />}>
+              <Route path={ROUTES.SURVEYS} element={<SurveysPage />} />
+            </Route>
+            <Route element={<RequirePermission permission={PERMISSIONS.VIEW_ALERTS} />}>
+              <Route path={ROUTES.ALERTS} element={<AlertsPage />} />
+            </Route>
+            <Route element={<RequirePermission permission={PERMISSIONS.MANAGE_USERS} />}>
+              <Route path={ROUTES.ACCOUNTS} element={<AccountsPage />} />
             </Route>
           </Route>
           </Route>

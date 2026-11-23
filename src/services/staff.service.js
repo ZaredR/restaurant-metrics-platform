@@ -15,7 +15,7 @@ export const PUESTOS = [
 export const puestoLabel = (value) =>
   PUESTOS.find((p) => p.value === value)?.label ?? value
 
-const FIELDS = 'id, numero_empleado, nombre, apellidos, puesto, telefono, email, fecha_ingreso, activo'
+const FIELDS = 'id, numero_empleado, nombre, apellidos, puesto, telefono, email, fecha_ingreso, activo, estado'
 
 export function listEmployees() {
   return run((sb) => sb.from('empleados').select(FIELDS).order('nombre'))
@@ -37,6 +37,7 @@ export function saveEmployee({ id, ...fields }) {
   )
 }
 
+/* `activo` stays in sync with `estado` in the database (activo = estado 'activo'). */
 export function setEmployeeActive(id, activo) {
   return run((sb) => sb.from('empleados').update({ activo }).eq('id', id))
 }

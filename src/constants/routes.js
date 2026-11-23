@@ -1,6 +1,7 @@
 export const ROUTES = {
   LOGIN:            '/login',
   RECOVER:          '/recover-password',
+  RESET_PASSWORD:   '/reset-password',
   DASHBOARD:        '/dashboard',
   RESTAURANTS:      '/restaurants',
   RESTAURANT_NEW:   '/restaurants/new',
@@ -37,6 +38,10 @@ export const ROUTES = {
   SCHEDULES:        '/schedules',
   ROSTER:           '/roster',
   HOSTESS:          '/hostess',
+  CLOSING:          '/closing',
+  SURVEYS:          '/surveys',
+  ALERTS:           '/alerts',
+  ACCOUNTS:         '/accounts',
 }
 
 /* Old-version screens hidden in the operational version: they don't

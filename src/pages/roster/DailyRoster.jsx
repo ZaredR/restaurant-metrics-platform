@@ -13,8 +13,11 @@ import { tipoAusenciaLabel } from '../../services/absences.service'
 import {
   ESTADOS_ROL, needsReason, getRoster, createRoster, getAvailability, getDirectory, getPreviousStations,
   addAssignments, updateAssignment, removeAssignment, publishRoster, closeRoster,
-  listAdjustments, sendToReview, returnToDraft,
+  listAdjustments, sendToReview, returnToDraft, getConflicts, listExceptions,
 } from '../../services/roster.service'
+import {
+  listAuthorizations, listRestrictions, slotWarnings, ESTADOS_EMPLEADO, RESTRICTION_CODE,
+} from '../../services/availability.service'
 import { suggestAssignments } from '../../services/rosterSuggest'
 import { today, dayHeader } from '../../utils/dates'
 import { datetime } from '../../utils/formatters'
@@ -30,10 +33,12 @@ const loadCatalogs = async () => {
     listShiftTypes(), listAreas(), listStations(),
     getConfigBool('ausencias_bloquean', true), getConfigBool('exigir_horario_en_rol', false),
   ])
+  const activeAreas = areas.filter((a) => a.activo)
   return {
     turnos,
-    areas: areas.filter((a) => a.activo),
-    estaciones: estaciones.filter((e) => e.activo),
+    areas: activeAreas,
+    // Stations of inactive areas don't show up in the roster either.
+    estaciones: estaciones.filter((e) => e.activo && activeAreas.some((a) => a.id === e.area_id)),
     bloquea,
     exigeHorario,
   }
@@ -60,17 +65,27 @@ export default function DailyRoster() {
   }, [turnos, turnoId])
 
   const loadRoster = useCallback(async () => {
-    if (!turnoId) return { roster: null, availability: [], adjustments: [] }
-    const [roster, availability] = await Promise.all([
+    const none = { roster: null, availability: [], adjustments: [], conflicts: [], exceptions: [], authorizations: [], restrictions: [] }
+    if (!turnoId) return none
+    const [roster, availability, authorizations, restrictions] = await Promise.all([
       getRoster(fecha, turnoId),
       canManage ? getAvailability(fecha, turnoId) : getDirectory(),
+      canManage ? listAuthorizations() : [],
+      canManage ? listRestrictions() : [],
     ])
     const hasHistory = canManage && roster && ['publicado', 'modificado', 'cerrado'].includes(roster.estado)
-    const adjustments = hasHistory ? await listAdjustments(roster.id) : []
-    return { roster, availability, adjustments }
+    const [adjustments, conflicts, exceptions] = await Promise.all([
+      hasHistory ? listAdjustments(roster.id) : [],
+      canManage && roster && roster.estado !== 'cerrado' ? getConflicts(roster.id) : [],
+      canManage && roster ? listExceptions(roster.id) : [],
+    ])
+    return { ...none, roster, availability, adjustments, conflicts, exceptions, authorizations, restrictions }
   }, [fecha, turnoId, canManage])
   const rosterData = useLoader(loadRoster)
-  const { roster = null, availability = [], adjustments = [] } = rosterData.data
+  const {
+    roster = null, availability = [], adjustments = [], conflicts = [], exceptions = [],
+    authorizations = [], restrictions = [],
+  } = rosterData.data
   const assignments = useMemo(() => roster?.asignaciones ?? [], [roster])
 
   // En revisión y cerrado no se edita; publicado y modificado sí, con motivo.
@@ -81,25 +96,34 @@ export default function DailyRoster() {
   /* Why an employee can't (or shouldn't) take a slot in this shift. */
   const issue = (e) => {
     if (!canManage) return null // viewers only get names, no schedule or absences
+    if (e.estado && e.estado !== 'activo') return ESTADOS_EMPLEADO[e.estado]?.label.toLowerCase()
     if (e.ausencia) return tipoAusenciaLabel(e.ausencia)
     if (e.es_descanso) return 'descanso'
     if (e.turno_id && e.turno_id !== turnoId) return 'otro turno'
     if (!e.turno_id) return 'sin horario'
     return null
   }
-  const blocked = (e) => Boolean((e.ausencia && bloquea) || (exigeHorario && issue(e)))
+  const blocked = (e) => Boolean((e.estado && e.estado !== 'activo') || (e.ausencia && bloquea) || (exigeHorario && issue(e)))
+
+  /* Restrictions and authorizations for a slot (warn only; the reason is asked when saving). */
+  const warningsFor = (empleadoId, slot) => (canManage
+    ? slotWarnings({ empleado_id: empleadoId, es_cierre: false, ...slot },
+      { fecha, turnoId, authorizations, restrictions, stations: estaciones, areas })
+    : [])
 
   /* <option>s for a slot: same puesto first, then the rest; taken or blocked ones disabled. */
-  const options = (puesto, currentId) => {
+  const options = (puesto, currentId, slot) => {
     const assigned = new Set(assignments.map((a) => a.empleado_id))
+    const warned = (e) => Boolean(issue(e) || warningsFor(e.empleado_id, slot).length)
     return [...availability]
       .sort((a, b) => (a.puesto === puesto ? 0 : 1) - (b.puesto === puesto ? 0 : 1)
-        || Number(!!issue(a)) - Number(!!issue(b))
+        || Number(warned(a)) - Number(warned(b))
         || a.nombre.localeCompare(b.nombre))
       .map((e) => {
         const why = issue(e)
         const taken = assigned.has(e.empleado_id) && e.empleado_id !== currentId
-        const tags = [e.puesto !== puesto && puestoLabel(e.puesto), why, taken && 'ya asignado'].filter(Boolean)
+        const tags = [e.puesto !== puesto && puestoLabel(e.puesto), why, ...warningsFor(e.empleado_id, slot),
+          taken && 'ya asignado'].filter(Boolean)
         return (
           <option key={e.empleado_id} value={e.empleado_id} disabled={taken || blocked(e)}>
             {e.nombre}{tags.length ? ` (${tags.join(', ')})` : ''}
@@ -122,21 +146,38 @@ export default function DailyRoster() {
     }
   }
 
-  /* Runs a change to the roster; once published it first asks for the reason. */
-  const change = (description, run) => {
+  /* Runs a change to the roster. Once published it first asks for the reason;
+     in a draft it asks only if the database reports a restriction (RA001). */
+  const change = async (description, run) => {
     if (needsReason(roster.estado)) {
       setReason('')
       setPending({ description, run })
-    } else {
-      act(() => run(undefined))
+      return
+    }
+    setBusy(true)
+    setNotice(null)
+    try {
+      await run(undefined)
+      await rosterData.reload()
+    } catch (err) {
+      if (err.code === RESTRICTION_CODE) {
+        setReason('')
+        setPending({ description, run, warning: err.message })
+      } else {
+        setNotice({ type: 'danger', text: err.message })
+      }
+    } finally {
+      setBusy(false)
     }
   }
 
   const confirmReason = () => {
-    const { run } = pending
+    const { run, warning } = pending
     const motivo = reason.trim()
     setPending(null)
-    act(() => run(motivo), 'Cambio guardado en el historial de ajustes.')
+    act(() => run(motivo), warning
+      ? 'Asignado con excepción: el motivo quedó registrado.'
+      : 'Cambio guardado en el historial de ajustes.')
   }
 
   /* Sets (or clears) the employee of a single-person slot: captain of an area or waiter of a station. */
@@ -153,6 +194,7 @@ export default function DailyRoster() {
     const previousStations = await getPreviousStations(fecha, turnoId)
     const { rows, uncovered } = suggestAssignments({
       areas, stations: estaciones, assignments, availability, turnoId, previousStations,
+      fits: (slot) => warningsFor(slot.empleado_id, slot).length === 0,
     })
     if (rows.length) await addAssignments(rows.map((r) => ({ ...r, rol_id: roster.id })))
     setNotice({
@@ -186,7 +228,7 @@ export default function DailyRoster() {
       aria-label={label}
     >
       <option value="">Sin asignar</option>
-      {options(puesto, current?.empleado_id)}
+      {options(puesto, current?.empleado_id, { ...row, es_cierre: !!current?.es_cierre })}
     </select>
   )
 
@@ -221,7 +263,7 @@ export default function DailyRoster() {
       aria-label={label}
     >
       <option value="">+ Agregar {funcion === 'runner' ? 'runner' : 'hostess'}</option>
-      {options(funcion, null)}
+      {options(funcion, null, { funcion, area_id: areaId, estacion_id: null })}
     </select>
   )
 
@@ -326,6 +368,20 @@ export default function DailyRoster() {
             {canManage && <div className="card"><p className="text-sm text-muted">Programados sin asignar</p><h3>{freeScheduled.length}</h3></div>}
           </div>
 
+          {canManage && conflicts.length > 0 && (
+            <div className="card" style={{ marginBottom: 'var(--space-4)' }}>
+              <h3 className="section-title">Conflictos por revisar ({conflicts.length})</h3>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 6 }}>
+                {conflicts.map((c, i) => (
+                  <li key={`${c.tipo}-${c.asignacion_id ?? ''}-${i}`} className="text-sm" style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                    <Badge variant={c.severidad === 'error' ? 'danger' : 'warning'}>{c.severidad === 'error' ? 'Bloquea' : 'Aviso'}</Badge>
+                    <span>{c.descripcion}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div className="grid-2">
             {areas.map((area) => {
               const captain = assignments.find((a) => a.funcion === 'capitan' && a.area_id === area.id)
@@ -407,6 +463,31 @@ export default function DailyRoster() {
             </div>
           </div>
 
+          {canManage && exceptions.length > 0 && (
+            <div className="card" style={{ marginTop: 'var(--space-4)' }}>
+              <h3 className="section-title">Asignaciones con excepción ({exceptions.length})</h3>
+              <p className="text-sm text-muted" style={{ marginBottom: 'var(--space-3)' }}>
+                Personas asignadas a pesar de una restricción, con el motivo.
+              </p>
+              <table className="data-table">
+                <thead>
+                  <tr><th>Fecha</th><th>Quién</th><th>Empleado</th><th>Advertencia</th><th>Motivo</th></tr>
+                </thead>
+                <tbody>
+                  {exceptions.map((x) => (
+                    <tr key={x.id}>
+                      <td style={{ whiteSpace: 'nowrap' }}>{datetime(x.created_at)}</td>
+                      <td>{x.usuario_nombre ?? '—'}</td>
+                      <td>{name(x.empleado_id)}</td>
+                      <td>{x.advertencias.join('; ')}</td>
+                      <td>{x.motivo}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           {canManage && adjustments.length > 0 && (
             <div className="card" style={{ marginTop: 'var(--space-4)' }}>
               <h3 className="section-title">Historial de ajustes ({adjustments.length})</h3>
@@ -436,7 +517,7 @@ export default function DailyRoster() {
       <Modal
         open={!!pending}
         onClose={() => setPending(null)}
-        title="Motivo del cambio"
+        title={pending?.warning ? 'Asignar con excepción' : 'Motivo del cambio'}
         size="sm"
         footer={
           <>
@@ -448,6 +529,9 @@ export default function DailyRoster() {
         {pending && (
           <form id="reason-form" onSubmit={(e) => { e.preventDefault(); if (reason.trim()) confirmReason() }}>
             <p style={{ marginBottom: 'var(--space-3)' }}><strong>{pending.description}</strong></p>
+            {pending.warning && (
+              <div style={{ marginBottom: 'var(--space-3)' }}><Alert type="warning">{pending.warning}</Alert></div>
+            )}
             <div className="form-group">
               <label className="form-label" htmlFor="adjust-reason">¿Por qué se hace el cambio? <span className="required">*</span></label>
               <input
@@ -460,7 +544,11 @@ export default function DailyRoster() {
                 required
               />
             </div>
-            <p className="text-sm text-muted">El rol ya está publicado: el cambio queda en el historial de ajustes.</p>
+            <p className="text-sm text-muted">
+              {pending.warning
+                ? 'Si lo asignas de todos modos, el motivo queda registrado en las excepciones del rol.'
+                : 'El rol ya está publicado: el cambio queda en el historial de ajustes.'}
+            </p>
           </form>
         )}
       </Modal>
@@ -483,6 +571,11 @@ export default function DailyRoster() {
           <>
             <p>Se cubrirán <strong>{covered} de {estaciones.length}</strong> estaciones, con <strong>{closingCount}</strong> meseros de cierre.</p>
             {covered < estaciones.length && <p className="text-sm text-muted" style={{ marginTop: 8 }}>Las mesas de estaciones sin mesero no se podrán asignar a clientes.</p>}
+            {conflicts.length > 0 && (
+              <p className="text-sm" style={{ marginTop: 8 }}>
+                Hay <strong>{conflicts.length}</strong> conflictos por revisar{conflicts.some((c) => c.severidad === 'error') ? ', algunos bloquean' : ''}.
+              </p>
+            )}
             <p className="text-sm text-muted" style={{ marginTop: 8 }}>
               {confirm === 'review'
                 ? 'Gerencia revisa y publica el rol. Mientras está en revisión no se puede editar.'

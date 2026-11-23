@@ -20,7 +20,7 @@ export function listPublishedRosters(fecha) {
 export function listFloorTables() {
   return run((sb) =>
     sb.from('mesas')
-      .select('id, numero, capacidad, estacion:estaciones(id, nombre, activo, area:areas(id, nombre, orden, activo))')
+      .select('id, numero, capacidad, estado, estacion:estaciones(id, nombre, activo, area:areas(id, nombre, orden, activo))')
       .eq('activo', true)
       .order('numero')
   )
@@ -76,6 +76,7 @@ export function subscribeToRoster(rolId, onChange) {
   const channel = sb.channel(`hostess-${rolId}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'visitas', filter: `rol_id=eq.${rolId}` }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'rol_asignaciones', filter: `rol_id=eq.${rolId}` }, onChange)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'mesas' }, onChange)
     .subscribe()
   return () => { sb.removeChannel(channel) }
 }

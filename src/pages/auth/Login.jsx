@@ -20,12 +20,7 @@ export default function Login() {
     <div className="auth-page">
       <div className="auth-left">
         <div className="auth-brand">
-          <svg width="40" height="40" viewBox="0 0 32 32" fill="none">
-            <rect width="32" height="32" rx="10" fill="var(--color-brand)"/>
-            <path d="M8 22V14l8-6 8 6v8" stroke="#0F172A" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
-            <rect x="13" y="16" width="6" height="6" rx="1" fill="#0F172A"/>
-          </svg>
-          <span className="auth-brand-name">Métricas Restaurantes</span>
+          <img src="/omnirest-logo.jpg" alt="OmniRest — Gestión Operativa para Restaurantes" className="auth-logo" />
         </div>
 
         <div className="auth-card">
@@ -116,33 +111,6 @@ export default function Login() {
               {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
             </button>
           </form>
-
-          <div className="auth-demo">
-            <p className="auth-demo-title">Cuentas de prueba</p>
-            <div className="auth-demo-grid">
-              {[
-                { email: 'admin@demo.com',      rol: 'Admin Global' },
-                { email: 'gerente@demo.com',    rol: 'Gerente' },
-                { email: 'supervisor@demo.com', rol: 'Supervisor' },
-                { email: 'mesero@demo.com',     rol: 'Mesero' },
-              ].map((d) => (
-                <button
-                  key={d.email}
-                  type="button"
-                  className="auth-demo-btn"
-                  onClick={() => {
-                    setForm({ email: d.email, password: 'demo1234' })
-                  }}
-                >
-                  <span className="auth-demo-rol">{d.rol}</span>
-                  <span className="auth-demo-email">{d.email}</span>
-                </button>
-              ))}
-            </div>
-            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginTop: 8 }}>
-              Contraseña: <code style={{ background: 'var(--color-navy-100)', padding: '1px 6px', borderRadius: 4 }}>demo1234</code>
-            </p>
-          </div>
         </div>
       </div>
 

@@ -40,7 +40,7 @@ export default function Config() {
             <h3 className="section-title">Configuración general</h3>
             <div className="form-group">
               <label className="form-label">Nombre del sistema</label>
-              <input className="form-input" defaultValue="Métricas Restaurantes" />
+              <input className="form-input" defaultValue="OmniRest" />
             </div>
             <div className="form-group">
               <label className="form-label">Zona horaria</label>

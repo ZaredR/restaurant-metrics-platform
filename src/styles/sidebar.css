@@ -27,7 +27,32 @@
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+}
+
+.sidebar-logo-img {
+  display: block;
+  height: 52px;
+  width: auto;
+  max-width: none;
+}
+
+/* Collapsed: icon above the expand button, so both fit in the narrow bar. */
+.sidebar-brand--collapsed {
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+}
+
+.sidebar-brand--collapsed .sidebar-collapse-btn {
+  margin-left: 0;
+}
+
+/* Collapsed: square chef-hat icon. */
+.sidebar-logo--icon .sidebar-logo-img {
+  height: 36px;
+  width: 36px;
 }
 
 .sidebar-brand-text {
@@ -293,6 +318,20 @@
   background: var(--color-red-500);
   border-radius: var(--radius-full);
   border: 2px solid var(--bg-topbar);
+}
+
+.topbar-badge--count {
+  width: auto;
+  height: auto;
+  min-width: 18px;
+  top: 0;
+  right: 0;
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 14px;
+  color: #fff;
+  text-align: center;
 }
 
 .topbar-avatar-btn {

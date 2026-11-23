@@ -9,7 +9,7 @@ export default function Dashboard() {
 
   if (!user) return null
 
-  if (user.rol === ROLES.ADMIN || user.rol === ROLES.GERENTE) {
+  if (user.rol === ROLES.ADMIN || user.rol === ROLES.GERENTE || user.rol === ROLES.ANALISTA) {
     return <DashboardAdmin />
   }
   if (user.rol === ROLES.SUPERVISOR) {

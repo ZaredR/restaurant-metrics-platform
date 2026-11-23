@@ -11,6 +11,9 @@ import {
   listPublishedRosters, listFloorTables, getTableAssignments, listVisits, getCoversByWaiter,
   registerVisit, seatVisit, closeVisit, cancelVisit, reassignVisit, subscribeToRoster,
 } from '../../services/hostess.service'
+import { setTableState, ESTADOS_MESA } from '../../services/floor.service'
+import { listSurveys } from '../../services/surveys.service'
+import SurveyForm from '../surveys/SurveyForm'
 import { today } from '../../utils/dates'
 import { number } from '../../utils/formatters'
 import './hostess.css'
@@ -18,6 +21,8 @@ import './hostess.css'
 const EMPTY_ARRIVAL = { nombre_referencia: '', adultos: 2, ninos: 0 }
 
 const covers = (v) => v.adultos + v.ninos * 0.5
+/* A reserved table can be seated (the reservation is used); the other states can't. */
+const SEATABLE = ['disponible', 'reservada']
 const minutesSince = (iso, now) => Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60000))
 const elapsed = (mins) => (mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)} h ${mins % 60} min`)
 
@@ -43,6 +48,11 @@ function Stepper({ label, value, min = 0, onChange }) {
 export default function HostessDesk() {
   const { hasPermission } = useAuthStore()
   const canReassign = hasPermission(PERMISSIONS.REASSIGN_TABLES)
+  const canSurvey = hasPermission(PERMISSIONS.CAPTURE_SURVEYS)
+  // Encuesta activa para ofrecerla al liberar una mesa (la primera si hay varias).
+  const surveys = useLoader(useCallback(() => (canSurvey ? listSurveys() : []), [canSurvey]))
+  const activeSurvey = surveys.data.find?.((s) => s.activa && s.preguntas.some((q) => q.activa))
+  const [surveyVisit, setSurveyVisit] = useState(null)
   const fecha = today()
 
   const rosterList = useLoader(useCallback(() => listPublishedRosters(fecha), [fecha]))
@@ -109,7 +119,8 @@ export default function HostessDesk() {
       .map((a) => ({ ...a, stations: [...a.stations.values()].sort((x, y) => x.nombre.localeCompare(y.nombre)) }))
   }, [tables])
 
-  const freeCount = tables.filter((t) => waiterByTable.has(t.id) && !seatedByTable.has(t.id)).length
+  const seatable = (mesa) => waiterByTable.has(mesa.id) && !seatedByTable.has(mesa.id) && SEATABLE.includes(mesa.estado ?? 'disponible')
+  const freeCount = tables.filter(seatable).length
   const seatedCovers = [...seatedByTable.values()].reduce((sum, v) => sum + Number(v.comensales), 0)
 
   const act = async (fn, success) => {
@@ -134,7 +145,7 @@ export default function HostessDesk() {
   }
 
   const onTileClick = async (mesa) => {
-    const free = waiterByTable.has(mesa.id) && !seatedByTable.has(mesa.id)
+    const free = seatable(mesa)
     if (choosing) {
       if (!free) return
       const { kind, visit } = choosing
@@ -191,10 +202,11 @@ export default function HostessDesk() {
   const tileClass = (mesa) => {
     const hasWaiter = waiterByTable.has(mesa.id)
     const busyTable = seatedByTable.has(mesa.id)
-    const free = hasWaiter && !busyTable
+    const free = seatable(mesa)
     return [
       'table-tile',
       busyTable && 'table-tile--busy',
+      !busyTable && mesa.estado && mesa.estado !== 'disponible' && `table-tile--${mesa.estado}`,
       !hasWaiter && 'table-tile--nowaiter',
       choosing && free && 'table-tile--target',
       choosing && !free && 'table-tile--dim',
@@ -248,6 +260,9 @@ export default function HostessDesk() {
           <div className="hostess-legend">
             <span style={{ '--legend-color': 'var(--color-green-500)' }}>Libre</span>
             <span style={{ '--legend-color': 'var(--color-amber-500)' }}>Ocupada</span>
+            <span style={{ '--legend-color': 'var(--color-blue-500)' }}>Reservada</span>
+            <span style={{ '--legend-color': 'var(--color-purple-500, #8b5cf6)' }}>En limpieza</span>
+            <span style={{ '--legend-color': 'var(--color-red-500)' }}>Fuera de servicio / cerrada</span>
             <span style={{ '--legend-color': 'var(--color-navy-300)' }}>Sin mesero en el rol</span>
           </div>
 
@@ -274,7 +289,7 @@ export default function HostessDesk() {
                             className={tileClass(mesa)}
                             onClick={() => onTileClick(mesa)}
                             disabled={busy || !waiterByTable.has(mesa.id)}
-                            aria-label={`Mesa ${mesa.numero}, ${visit ? `ocupada por ${visit.nombre_referencia}` : waiterByTable.has(mesa.id) ? 'libre' : 'sin mesero'}`}
+                            aria-label={`Mesa ${mesa.numero}, ${visit ? `ocupada por ${visit.nombre_referencia}` : !waiterByTable.has(mesa.id) ? 'sin mesero' : seatable(mesa) && mesa.estado !== 'reservada' ? 'libre' : ESTADOS_MESA[mesa.estado]?.label.toLowerCase()}`}
                           >
                             <span className="table-tile-number">{mesa.numero}</span>
                             {visit ? (
@@ -286,7 +301,12 @@ export default function HostessDesk() {
                                 )}
                               </>
                             ) : (
-                              <span className="table-tile-meta">{mesa.capacidad} lugares</span>
+                              <>
+                                <span className="table-tile-meta">{mesa.capacidad} lugares</span>
+                                {mesa.estado && mesa.estado !== 'disponible' && (
+                                  <span className="table-tile-meta" style={{ fontWeight: 600 }}>{ESTADOS_MESA[mesa.estado]?.label}</span>
+                                )}
+                              </>
                             )}
                           </button>
                         )
@@ -364,6 +384,13 @@ export default function HostessDesk() {
         </div>
       </div>
 
+      <SurveyForm
+        visit={surveyVisit}
+        survey={activeSurvey}
+        onClose={() => setSurveyVisit(null)}
+        onSaved={() => { setNotice({ type: 'success', text: `Encuesta de ${surveyVisit.nombre_referencia} guardada.` }); setSurveyVisit(null) }}
+      />
+
       <Modal
         open={!!detail}
         onClose={() => { setDetail(null); setReassign(null) }}
@@ -397,16 +424,27 @@ export default function HostessDesk() {
             <Button variant="secondary" onClick={() => { const v = detail.visit; setDetail(null); setChoosing({ kind: 'move', visit: v }) }}>
               Cambiar de mesa
             </Button>
-            <Button variant="primary" onClick={() => { const v = detail.visit; setDetail(null); act(() => closeVisit(v.id), `Mesa ${detail.mesa.numero} liberada.`) }}>
+            <Button variant="primary" onClick={async () => {
+              const v = detail.visit
+              const { mesa } = detail
+              setDetail(null)
+              const ok = await act(() => closeVisit(v.id), `Mesa ${mesa.numero} liberada.`)
+              if (ok && activeSurvey) {
+                setSurveyVisit({ visita_id: v.id, nombre_referencia: v.nombre_referencia, mesa: mesa.numero,
+                  mesero: waiterName.get(v.mesero_id), comensales: v.comensales })
+              }
+            }}>
               Liberar mesa
             </Button>
           </>
         ) : (
           <>
             <Button variant="secondary" onClick={() => setDetail(null)}>Cancelar</Button>
-            <Button variant="primary" disabled={!quick.nombre_referencia.trim() || quick.adultos + quick.ninos === 0} onClick={seatQuick}>
-              Sentar aquí
-            </Button>
+            {detail && seatable(detail.mesa) && (
+              <Button variant="primary" disabled={!quick.nombre_referencia.trim() || quick.adultos + quick.ninos === 0} onClick={seatQuick}>
+                Sentar aquí
+              </Button>
+            )}
           </>
         )}
       >
@@ -451,6 +489,23 @@ export default function HostessDesk() {
               ) : (
                 <>
                   <div className="form-group">
+                    <label className="form-label" htmlFor="table-state">Estado de la mesa</label>
+                    <select id="table-state" className="form-select" value={detail.mesa.estado ?? 'disponible'} disabled={busy}
+                      onChange={async (e) => {
+                        const estado = e.target.value
+                        const { mesa } = detail
+                        const ok = await act(() => setTableState(mesa.id, estado),
+                          `Mesa ${mesa.numero}: ${ESTADOS_MESA[estado].label.toLowerCase()}.`)
+                        if (ok) setDetail({ mesa: { ...mesa, estado } })
+                      }}>
+                      {Object.entries(ESTADOS_MESA).map(([value, e]) => <option key={value} value={value}>{e.label}</option>)}
+                    </select>
+                  </div>
+                  {detail.mesa.estado === 'reservada' && (
+                    <p className="text-sm text-muted" style={{ marginBottom: 'var(--space-3)' }}>Al sentar aquí a la reserva, la mesa vuelve a disponible.</p>
+                  )}
+                  {seatable(detail.mesa) && (<>
+                  <div className="form-group">
                     <label className="form-label" htmlFor="quick-name">Nombre de referencia</label>
                     <input id="quick-name" className="form-input" value={quick.nombre_referencia}
                       onChange={(e) => setQuick((q) => ({ ...q, nombre_referencia: e.target.value }))} autoFocus />
@@ -459,6 +514,7 @@ export default function HostessDesk() {
                     <Stepper label="Adultos" value={quick.adultos} onChange={(adultos) => setQuick((q) => ({ ...q, adultos }))} />
                     <Stepper label="Niños" value={quick.ninos} onChange={(ninos) => setQuick((q) => ({ ...q, ninos }))} />
                   </div>
+                  </>)}
                 </>
               )}
             </>

@@ -26,7 +26,9 @@ export async function run(build) {
   if (error) {
     const constraint = Object.keys(CONSTRAINTS).find((c) => error.message?.includes(c))
     // Business-rule errors (check_violation) come from our triggers already in Spanish.
-    throw new Error(constraint ? CONSTRAINTS[constraint] : FRIENDLY[error.code] ?? error.message)
+    const err = new Error(constraint ? CONSTRAINTS[constraint] : FRIENDLY[error.code] ?? error.message)
+    err.code = error.code // e.g. RA001: a restriction that needs a reason to proceed
+    throw err
   }
   return data
 }

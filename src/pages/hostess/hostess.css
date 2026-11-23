@@ -71,6 +71,23 @@
   color: var(--text-tertiary);
 }
 
+.table-tile--reservada {
+  border-color: var(--color-blue-500);
+  background: var(--color-blue-50);
+}
+
+.table-tile--en_limpieza {
+  border-color: var(--color-purple-500, #8b5cf6);
+  background: var(--color-purple-50, #f5f3ff);
+}
+
+.table-tile--fuera_servicio,
+.table-tile--cerrada {
+  border-color: var(--color-red-500);
+  background: var(--color-red-50);
+  color: var(--text-tertiary);
+}
+
 .table-tile--target {
   box-shadow: 0 0 0 3px var(--color-blue-500);
 }

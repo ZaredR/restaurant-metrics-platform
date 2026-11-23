@@ -1,6 +1,8 @@
 import { useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/auth.store'
 import Avatar from '../ui/Avatar'
+import AlertsBell from './AlertsBell'
+import { PERMISSIONS } from '../../constants/permissions'
 
 const routeLabels = {
   '/dashboard':   'Dashboard',
@@ -21,11 +23,15 @@ const routeLabels = {
   '/absences':    'Ausencias',
   '/roster':      'Rol diario',
   '/hostess':     'Hostess',
+  '/closing':     'Cierre',
+  '/surveys':     'Encuestas',
+  '/alerts':      'Alertas',
+  '/accounts':    'Usuarios',
 }
 
 export default function Topbar({ collapsed }) {
   const { pathname } = useLocation()
-  const { user } = useAuthStore()
+  const { user, hasPermission } = useAuthStore()
 
   const base = '/' + pathname.split('/')[1]
   const label = routeLabels[base] ?? 'Inicio'
@@ -52,13 +58,8 @@ export default function Topbar({ collapsed }) {
           </div>
         )}
 
-        <button className="topbar-icon-btn" title="Notificaciones">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-          </svg>
-          <span className="topbar-badge" />
-        </button>
+        {/* Real pending alerts for the user's profile (the old static red dot was decorative). */}
+        {hasPermission(PERMISSIONS.VIEW_ALERTS) && <AlertsBell />}
 
         <button className="topbar-avatar-btn">
           <Avatar name={user?.nombre ?? 'Usuario'} size="sm" />

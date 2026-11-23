@@ -110,7 +110,8 @@
 
 .grid-2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* minmax(0, …): charts and tables shrink with the column instead of overflowing it */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--space-4);
 }
 

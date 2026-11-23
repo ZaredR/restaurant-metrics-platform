@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import DataTable from '../../components/ui/DataTable'
-import { StatusBadge } from '../../components/ui/Badge'
+import Badge, { StatusBadge } from '../../components/ui/Badge'
 import Button from '../../components/ui/Button'
 import Modal from '../../components/ui/Modal'
 import Alert from '../../components/ui/Alert'
@@ -9,7 +9,7 @@ import { PERMISSIONS } from '../../constants/permissions'
 import { useLoader } from '../../hooks/useLoader'
 import {
   listAreas, saveArea, listStations, saveStation,
-  listTables, saveTable, createTableRange, setFloorItemActive,
+  listTables, saveTable, createTableRange, setFloorItemActive, setTableState, ESTADOS_MESA,
 } from '../../services/floor.service'
 
 const TABS = [
@@ -35,6 +35,8 @@ const FORMS = {
 export default function FloorConfig() {
   const { hasPermission } = useAuthStore()
   const canManage = hasPermission(PERMISSIONS.MANAGE_FLOOR)
+  // Disponible, reservada, en limpieza…: la operación diaria, no el catálogo.
+  const canChangeState = hasPermission(PERMISSIONS.HOSTESS_DESK)
   const { data, loading, error, reload } = useLoader(loadFloor)
   const { areas = [], estaciones = [], mesas = [] } = data
 
@@ -85,6 +87,16 @@ export default function FloorConfig() {
     }
   }
 
+  const changeState = async (row, estado) => {
+    setActionError('')
+    try {
+      await setTableState(row.id, estado)
+      reload()
+    } catch (err) {
+      setActionError(err.message)
+    }
+  }
+
   const toggleActive = async (table, row) => {
     setActionError('')
     try {
@@ -130,6 +142,13 @@ export default function FloorConfig() {
     { header: 'Área',      accessor: 'area_nombre', sortable: true },
     { header: 'Capacidad', accessor: 'capacidad', sortable: true },
     { header: 'Estado',    accessor: 'activo', render: (r) => <StatusBadge active={r.activo} /> },
+    { header: 'Operación', accessor: 'estado', sortable: true,
+      render: (r) => (canChangeState && r.activo ? (
+        <select className="form-select" style={{ padding: '2px 6px', fontSize: 13 }} value={r.estado}
+          onChange={(e) => changeState(r, e.target.value)} aria-label={`Estado operativo de la mesa ${r.numero}`}>
+          {Object.entries(ESTADOS_MESA).map(([value, e]) => <option key={value} value={value}>{e.label}</option>)}
+        </select>
+      ) : <Badge variant={ESTADOS_MESA[r.estado]?.variant}>{ESTADOS_MESA[r.estado]?.label ?? r.estado}</Badge>) },
     ...actionsColumn('table', 'mesas'),
   ]
 

@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import TodaySummary from './TodaySummary'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import KPICard from '../../components/ui/KPICard'
 import { currency, number } from '../../utils/formatters'
@@ -33,6 +34,8 @@ export default function DashboardSupervisor() {
           <p className="page-subtitle">Tu unidad · Mayo 2026</p>
         </div>
       </div>
+
+      <TodaySummary />
 
       <div className="grid-kpi">
         {kpis.map((kpi) => (
