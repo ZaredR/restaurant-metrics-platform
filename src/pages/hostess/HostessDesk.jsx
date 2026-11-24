@@ -10,6 +10,7 @@ import { useLoader } from '../../hooks/useLoader'
 import {
   listPublishedRosters, listFloorTables, getTableAssignments, listVisits, getCoversByWaiter,
   registerVisit, seatVisit, closeVisit, cancelVisit, reassignVisit, subscribeToRoster,
+  listTirosWaiters, nextTirosWaiter,
 } from '../../services/hostess.service'
 import { setTableState, ESTADOS_MESA } from '../../services/floor.service'
 import { listSurveys } from '../../services/surveys.service'
@@ -63,14 +64,14 @@ export default function HostessDesk() {
   }, [rosters, rolId])
 
   const loadDesk = useCallback(async () => {
-    if (!rolId) return { tables: [], assigned: [], visits: [], coversByWaiter: [] }
-    const [tables, assigned, visits, coversByWaiter] = await Promise.all([
-      listFloorTables(), getTableAssignments(rolId), listVisits(rolId), getCoversByWaiter(rolId),
+    if (!rolId) return { tables: [], assigned: [], visits: [], coversByWaiter: [], tirosWaiters: [] }
+    const [tables, assigned, visits, coversByWaiter, tirosWaiters] = await Promise.all([
+      listFloorTables(), getTableAssignments(rolId), listVisits(rolId), getCoversByWaiter(rolId), listTirosWaiters(rolId),
     ])
-    return { tables, assigned, visits, coversByWaiter }
+    return { tables, assigned, visits, coversByWaiter, tirosWaiters }
   }, [rolId])
   const desk = useLoader(loadDesk)
-  const { tables = [], assigned = [], visits = [], coversByWaiter = [] } = desk.data
+  const { tables = [], assigned = [], visits = [], coversByWaiter = [], tirosWaiters = [] } = desk.data
   const { reload } = desk
 
   /* Other tablets' changes arrive through Realtime. */
@@ -93,6 +94,7 @@ export default function HostessDesk() {
   const [choosing, setChoosing] = useState(null) // { kind: 'new' | 'waiting' | 'move', visit? }
   const [detail, setDetail] = useState(null)     // { mesa, visit? }
   const [reassign, setReassign] = useState(null) // { meseroId, motivo } while reassigning the open table
+  const [tiro, setTiro] = useState(null)         // { mesa, kind, visit?, meseroId } when seating in a TIROS area
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState(null)
 
@@ -102,24 +104,40 @@ export default function HostessDesk() {
   const waiting = visits.filter((v) => v.estado === 'espera')
   const waiterName = useMemo(() => new Map(coversByWaiter.map((w) => [w.empleado_id, w.mesero])), [coversByWaiter])
 
-  /* Areas → stations → tables, in the area order of the catalog. */
+  const waitersByArea = useMemo(() => {
+    const map = new Map()
+    tirosWaiters.forEach((w) => map.set(w.area_id, [...(map.get(w.area_id) ?? []), w.empleado_id]))
+    return map
+  }, [tirosWaiters])
+
+  /* Areas → groups of tables, in the area order of the catalog. By stations: one group per
+     station (plus the tables without one); in TIROS or without service: a single group. */
   const floor = useMemo(() => {
     const areas = new Map()
     tables
-      .filter((t) => t.estacion?.activo && t.estacion.area?.activo)
+      .filter((t) => t.area?.activo && (!t.estacion || t.estacion.activo))
       .forEach((t) => {
-        const { area } = t.estacion
-        if (!areas.has(area.id)) areas.set(area.id, { ...area, stations: new Map() })
-        const stations = areas.get(area.id).stations
-        if (!stations.has(t.estacion.id)) stations.set(t.estacion.id, { ...t.estacion, tables: [] })
-        stations.get(t.estacion.id).tables.push(t)
+        if (!areas.has(t.area.id)) areas.set(t.area.id, { ...t.area, tables: [] })
+        areas.get(t.area.id).tables.push(t)
       })
     return [...areas.values()]
       .sort((a, b) => a.orden - b.orden || a.nombre.localeCompare(b.nombre))
-      .map((a) => ({ ...a, stations: [...a.stations.values()].sort((x, y) => x.nombre.localeCompare(y.nombre)) }))
-  }, [tables])
+      .map((a) => {
+        const modo = waiterByTable.get(a.tables[0]?.id)?.modo ?? 'estaciones'
+        if (modo !== 'estaciones') return { ...a, modo, groups: [{ id: a.id, nombre: modo === 'tiros' ? 'TIROS' : 'Sin servicio', tables: a.tables }] }
+        const groups = new Map()
+        a.tables.forEach((t) => {
+          const key = t.estacion?.id ?? 'sin-estacion'
+          if (!groups.has(key)) groups.set(key, { id: key, nombre: t.estacion?.nombre ?? 'Sin estación', sinEstacion: !t.estacion, tables: [] })
+          groups.get(key).tables.push(t)
+        })
+        return { ...a, modo, groups: [...groups.values()].sort((x, y) => x.sinEstacion - y.sinEstacion || x.nombre.localeCompare(y.nombre)) }
+      })
+  }, [tables, waiterByTable])
 
-  const seatable = (mesa) => waiterByTable.has(mesa.id) && !seatedByTable.has(mesa.id) && SEATABLE.includes(mesa.estado ?? 'disponible')
+  const served = (mesa) => !!waiterByTable.get(mesa.id)?.atendible
+  const isTiros = (mesa) => waiterByTable.get(mesa.id)?.modo === 'tiros'
+  const seatable = (mesa) => served(mesa) && !seatedByTable.has(mesa.id) && SEATABLE.includes(mesa.estado ?? 'disponible')
   const freeCount = tables.filter(seatable).length
   const seatedCovers = [...seatedByTable.values()].reduce((sum, v) => sum + Number(v.comensales), 0)
 
@@ -139,9 +157,31 @@ export default function HostessDesk() {
     }
   }
 
-  const tableLabel = (mesa) => {
+  const tableLabel = (mesa, meseroId = null) => {
     const a = waiterByTable.get(mesa.id)
-    return `mesa ${mesa.numero}${a ? ` (${a.mesero})` : ''}`
+    const mesero = meseroId ? waiterName.get(meseroId) : a?.mesero
+    return `mesa ${mesa.numero}${mesero ? ` (${mesero})` : ''}`
+  }
+
+  /* In a TIROS area the system proposes the waiter with the fewest covers; the hostess may pick another. */
+  const proposeTiro = async (mesa, kind, visit) => {
+    let meseroId = ''
+    try { meseroId = (await nextTirosWaiter(rolId, waiterByTable.get(mesa.id).area_id)) ?? '' } catch { /* the trigger picks one anyway */ }
+    setTiro({ mesa, kind, visit, meseroId })
+  }
+
+  const confirmTiro = async () => {
+    const { mesa, kind, visit, meseroId } = tiro
+    setTiro(null)
+    if (kind === 'new' || kind === 'quick') {
+      const data = kind === 'new' ? arrival : quick
+      const ok = await act(() => registerVisit({ rol_id: rolId, ...data, mesa_id: mesa.id, mesero_id: meseroId || null }),
+        `${data.nombre_referencia} sentado en ${tableLabel(mesa, meseroId)}.`)
+      if (ok) (kind === 'new' ? setArrival : setQuick)(EMPTY_ARRIVAL)
+    } else {
+      act(() => seatVisit(visit.id, mesa.id, meseroId || null),
+        `${visit.nombre_referencia} ${kind === 'move' ? 'cambió a' : 'sentado en'} ${tableLabel(mesa, meseroId)}.`)
+    }
   }
 
   const onTileClick = async (mesa) => {
@@ -150,6 +190,10 @@ export default function HostessDesk() {
       if (!free) return
       const { kind, visit } = choosing
       setChoosing(null)
+      if (isTiros(mesa)) {
+        proposeTiro(mesa, kind, visit)
+        return
+      }
       if (kind === 'new') {
         const ok = await act(() => registerVisit({ rol_id: rolId, ...arrival, mesa_id: mesa.id }),
           `${arrival.nombre_referencia} sentado en ${tableLabel(mesa)}.`)
@@ -160,7 +204,7 @@ export default function HostessDesk() {
       }
       return
     }
-    if (!waiterByTable.has(mesa.id)) return
+    if (!served(mesa) && !seatedByTable.has(mesa.id)) return
     setDetail({ mesa, visit: seatedByTable.get(mesa.id) })
   }
 
@@ -176,6 +220,10 @@ export default function HostessDesk() {
   const seatQuick = async () => {
     const { mesa } = detail
     setDetail(null)
+    if (isTiros(mesa)) {
+      proposeTiro(mesa, 'quick')
+      return
+    }
     const ok = await act(() => registerVisit({ rol_id: rolId, ...quick, mesa_id: mesa.id }),
       `${quick.nombre_referencia} sentado en ${tableLabel(mesa)}.`)
     if (ok) setQuick(EMPTY_ARRIVAL)
@@ -200,7 +248,7 @@ export default function HostessDesk() {
   }
 
   const tileClass = (mesa) => {
-    const hasWaiter = waiterByTable.has(mesa.id)
+    const hasWaiter = served(mesa)
     const busyTable = seatedByTable.has(mesa.id)
     const free = seatable(mesa)
     return [
@@ -263,21 +311,31 @@ export default function HostessDesk() {
             <span style={{ '--legend-color': 'var(--color-blue-500)' }}>Reservada</span>
             <span style={{ '--legend-color': 'var(--color-purple-500, #8b5cf6)' }}>En limpieza</span>
             <span style={{ '--legend-color': 'var(--color-red-500)' }}>Fuera de servicio / cerrada</span>
-            <span style={{ '--legend-color': 'var(--color-navy-300)' }}>Sin mesero en el rol</span>
+            <span style={{ '--legend-color': 'var(--color-navy-300)' }}>Sin mesero / sin servicio</span>
           </div>
 
           {desk.loading && !tables.length && <div className="loading-screen"><div className="spinner spinner-lg" /></div>}
 
           {floor.map((area) => (
             <section key={area.id} className="hostess-area">
-              <h3 className="section-title">{area.nombre}</h3>
-              {area.stations.map((station) => {
+              <h3 className="section-title">
+                {area.nombre}
+                {area.modo === 'tiros' && <span className="badge badge-info" style={{ marginLeft: 8 }}>TIROS</span>}
+                {area.modo === 'sin_servicio' && <span className="badge badge-neutral" style={{ marginLeft: 8 }}>Sin servicio</span>}
+              </h3>
+              {area.groups.map((station) => {
                 const waiter = waiterByTable.get(station.tables[0]?.id)
+                const tirosNames = (waitersByArea.get(area.id) ?? []).map((id) => waiterName.get(id)).filter(Boolean)
+                const subtitle = area.modo === 'tiros'
+                  ? (tirosNames.length ? tirosNames.join(', ') : 'Sin meseros en tiros')
+                  : area.modo === 'sin_servicio' ? 'No se asignan mesas en este turno'
+                    : station.sinEstacion ? 'Asígnales estación en Local'
+                      : waiter?.mesero ? `${waiter.mesero}${waiter.capitan ? ` · cap. ${waiter.capitan}` : ''}` : 'Sin mesero'
                 return (
                   <div key={station.id} className="hostess-station">
                     <div className="hostess-station-title">
                       <span>{station.nombre}</span>
-                      <span>{waiter ? `${waiter.mesero}${waiter.capitan ? ` · cap. ${waiter.capitan}` : ''}` : 'Sin mesero'}</span>
+                      <span>{subtitle}</span>
                     </div>
                     <div className="table-tiles">
                       {station.tables.map((mesa) => {
@@ -288,15 +346,17 @@ export default function HostessDesk() {
                             type="button"
                             className={tileClass(mesa)}
                             onClick={() => onTileClick(mesa)}
-                            disabled={busy || !waiterByTable.has(mesa.id)}
-                            aria-label={`Mesa ${mesa.numero}, ${visit ? `ocupada por ${visit.nombre_referencia}` : !waiterByTable.has(mesa.id) ? 'sin mesero' : seatable(mesa) && mesa.estado !== 'reservada' ? 'libre' : ESTADOS_MESA[mesa.estado]?.label.toLowerCase()}`}
+                            disabled={busy || (!served(mesa) && !visit)}
+                            aria-label={`Mesa ${mesa.numero}, ${visit ? `ocupada por ${visit.nombre_referencia}` : !served(mesa) ? (area.modo === 'sin_servicio' ? 'sin servicio' : 'sin mesero') : seatable(mesa) && mesa.estado !== 'reservada' ? 'libre' : ESTADOS_MESA[mesa.estado]?.label.toLowerCase()}`}
                           >
                             <span className="table-tile-number">{mesa.numero}</span>
                             {visit ? (
                               <>
                                 <span className="table-tile-meta">{number(visit.comensales, 1)} com. · {elapsed(minutesSince(visit.hora_sentada, now))}</span>
                                 <span className="table-tile-meta" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{visit.nombre_referencia}</span>
-                                {visit.mesero_id !== waiterByTable.get(mesa.id)?.mesero_id && (
+                                {isTiros(mesa) ? (
+                                  <span className="table-tile-meta" style={{ fontWeight: 600 }}>{waiterName.get(visit.mesero_id)}</span>
+                                ) : visit.mesero_id !== waiterByTable.get(mesa.id)?.mesero_id && (
                                   <span className="table-tile-meta" style={{ fontWeight: 600 }}>↪ {waiterName.get(visit.mesero_id) ?? 'otro mesero'}</span>
                                 )}
                               </>
@@ -454,14 +514,20 @@ export default function HostessDesk() {
           return (
             <>
               <p className="text-sm text-muted" style={{ marginBottom: 'var(--space-3)' }}>
-                Mesero: <strong>{a?.mesero}</strong>{a?.capitan ? <> · Capitán: <strong>{a.capitan}</strong></> : null} · {detail.mesa.capacidad} lugares
+                {a?.modo === 'tiros'
+                  ? <>Área en <strong>TIROS</strong></>
+                  : <>Mesero: <strong>{a?.mesero ?? '—'}</strong>{a?.capitan ? <> · Capitán: <strong>{a.capitan}</strong></> : null}</>}
+                {' '}· {detail.mesa.capacidad} lugares
               </p>
               {v ? (
                 <>
                   <p><strong>{v.nombre_referencia}</strong></p>
                   <p>{v.adultos} adultos{v.ninos ? `, ${v.ninos} niños` : ''} · <strong>{number(v.comensales, 1)}</strong> comensales</p>
                   <p className="text-sm text-muted">Sentados hace {elapsed(minutesSince(v.hora_sentada, now))}</p>
-                  {v.mesero_id !== a?.mesero_id && (
+                  {a?.modo === 'tiros' && (
+                    <p className="text-sm" style={{ marginTop: 4 }}>Atiende: <strong>{waiterName.get(v.mesero_id)}</strong></p>
+                  )}
+                  {a?.modo !== 'tiros' && v.mesero_id !== a?.mesero_id && (
                     <p className="text-sm" style={{ marginTop: 4 }}>Atiende: <strong>{waiterName.get(v.mesero_id)}</strong> (reasignada)</p>
                   )}
                   {reassign && (
@@ -518,6 +584,41 @@ export default function HostessDesk() {
                 </>
               )}
             </>
+          )
+        })()}
+      </Modal>
+
+      <Modal
+        open={!!tiro}
+        onClose={() => setTiro(null)}
+        title={tiro ? `Mesa ${tiro.mesa.numero} · TIROS` : ''}
+        size="sm"
+        footer={(
+          <>
+            <Button variant="secondary" onClick={() => setTiro(null)}>Cancelar</Button>
+            <Button variant="primary" disabled={busy} onClick={confirmTiro}>Sentar</Button>
+          </>
+        )}
+      >
+        {tiro && (() => {
+          const ids = waitersByArea.get(waiterByTable.get(tiro.mesa.id)?.area_id) ?? []
+          const load = new Map(coversByWaiter.map((w) => [w.empleado_id, w]))
+          return (
+            <div className="form-group">
+              <label className="form-label" htmlFor="tiro-waiter">Mesero que atiende</label>
+              <select id="tiro-waiter" className="form-select" value={tiro.meseroId}
+                onChange={(e) => setTiro((t) => ({ ...t, meseroId: e.target.value }))}>
+                {!tiro.meseroId && <option value="">El que lleve menos comensales</option>}
+                {ids.map((id) => (
+                  <option key={id} value={id}>
+                    {waiterName.get(id) ?? 'Mesero'} · {number(load.get(id)?.comensales ?? 0, 1)} com.
+                  </option>
+                ))}
+              </select>
+              <p className="text-sm text-muted" style={{ marginTop: 4 }}>
+                El sistema propone al mesero con menos comensales; puedes elegir otro del área.
+              </p>
+            </div>
           )
         })()}
       </Modal>

@@ -16,19 +16,38 @@ export function listPublishedRosters(fecha) {
   )
 }
 
-/* Every active table with its station and area (including stations without a waiter). */
+/* Every active table with its area and (optional) station. */
 export function listFloorTables() {
   return run((sb) =>
     sb.from('mesas')
-      .select('id, numero, capacidad, estado, estacion:estaciones(id, nombre, activo, area:areas(id, nombre, orden, activo))')
+      .select('id, numero, capacidad, estado, area_id, area:areas(id, nombre, orden, activo), estacion:estaciones(id, nombre, activo)')
       .eq('activo', true)
       .order('numero')
   )
 }
 
-/* Table → waiter → captain for a roster. */
-export function getTableAssignments(rolId) {
-  return run((sb) => sb.from('v_mesas_asignadas').select('mesa_id, mesero_id, mesero, capitan').eq('rol_id', rolId))
+/* Per table of the roster: the area's work mode, whether it can be seated and,
+   in areas by stations, the station's waiter and captain. */
+export async function getTableAssignments(rolId) {
+  const [mesas, nombres] = await Promise.all([
+    run((sb) => sb.from('v_mesas_rol').select('mesa_id, area_id, modo, mesero_id, atendible').eq('rol_id', rolId)),
+    run((sb) => sb.from('v_mesas_asignadas').select('mesa_id, mesero, capitan').eq('rol_id', rolId)),
+  ])
+  const byTable = new Map(nombres.map((n) => [n.mesa_id, n]))
+  return mesas.map((m) => ({ ...m, ...(m.mesero_id ? byTable.get(m.mesa_id) : {}) }))
+}
+
+/* Waiters working in TIROS (no station) per area, for the hostess to choose from. */
+export function listTirosWaiters(rolId) {
+  return run((sb) =>
+    sb.from('rol_asignaciones').select('empleado_id, area_id')
+      .eq('rol_id', rolId).eq('funcion', 'mesero').is('estacion_id', null)
+  )
+}
+
+/* The TIROS waiter with the fewest covers in that area (the system's proposal). */
+export function nextTirosWaiter(rolId, areaId) {
+  return run((sb) => sb.rpc('mesero_siguiente_tiro', { p_rol_id: rolId, p_area_id: areaId }))
 }
 
 export function listVisits(rolId) {
@@ -46,14 +65,17 @@ export function getCoversByWaiter(rolId) {
   )
 }
 
-/* With mesa_id the trigger seats the visit and fills waiter, area and captain. */
-export function registerVisit({ rol_id, nombre_referencia, adultos, ninos, mesa_id = null }) {
-  return run((sb) => sb.from('visitas').insert({ rol_id, nombre_referencia, adultos, ninos, mesa_id }))
+/* With mesa_id the trigger seats the visit and fills waiter, area and captain.
+   In a TIROS area, mesero_id is the waiter chosen by the hostess (null = the system picks). */
+export function registerVisit({ rol_id, nombre_referencia, adultos, ninos, mesa_id = null, mesero_id = null }) {
+  return run((sb) => sb.from('visitas').insert({ rol_id, nombre_referencia, adultos, ninos, mesa_id, mesero_id }))
 }
 
 /* Seat a waiting visit, or move a seated one to another table. */
-export function seatVisit(id, mesaId) {
-  return run((sb) => sb.from('visitas').update({ mesa_id: mesaId }).eq('id', id))
+export function seatVisit(id, mesaId, meseroId = null) {
+  const fields = { mesa_id: mesaId }
+  if (meseroId) fields.mesero_id = meseroId
+  return run((sb) => sb.from('visitas').update(fields).eq('id', id))
 }
 
 export function closeVisit(id) {
@@ -77,6 +99,7 @@ export function subscribeToRoster(rolId, onChange) {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'visitas', filter: `rol_id=eq.${rolId}` }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'rol_asignaciones', filter: `rol_id=eq.${rolId}` }, onChange)
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'mesas' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'rol_areas', filter: `rol_id=eq.${rolId}` }, onChange)
     .subscribe()
   return () => { sb.removeChannel(channel) }
 }

@@ -13,13 +13,13 @@ export const ESTADOS_ROL = {
 /* Once published, every change goes through rol_ajustar() with a reason. */
 export const needsReason = (estado) => estado === 'publicado' || estado === 'modificado'
 
-const ASSIGNMENT_FIELDS = 'id, empleado_id, funcion, area_id, estacion_id, es_cierre'
+const ASSIGNMENT_FIELDS = 'id, empleado_id, funcion, area_id, estacion_id, es_cierre, funcion_runner_id'
 
 /* The roster for a date and shift, or null if it hasn't been created yet. */
 export function getRoster(fecha, turnoId) {
   return run((sb) =>
     sb.from('roles_diarios')
-      .select(`id, fecha, turno_id, estado, notas, publicado_at, asignaciones:rol_asignaciones(${ASSIGNMENT_FIELDS})`)
+      .select(`id, fecha, turno_id, estado, notas, publicado_at, asignaciones:rol_asignaciones(${ASSIGNMENT_FIELDS}), modos:rol_areas(area_id, modo)`)
       .eq('fecha', fecha)
       .eq('turno_id', turnoId)
       .maybeSingle()
@@ -121,4 +121,15 @@ export function publishRoster(id) {
 
 export function closeRoster(id) {
   return run((sb) => sb.rpc('cerrar_rol', { p_rol_id: id }))
+}
+
+/* Work mode of an area in a roster: 'estaciones' (default), 'tiros' or 'sin_servicio'. */
+export const MODOS_AREA = {
+  sin_servicio: 'Sin servicio',
+  estaciones:   'Estaciones',
+  tiros:        'TIROS',
+}
+
+export function setAreaMode(rolId, areaId, modo) {
+  return run((sb) => sb.from('rol_areas').upsert({ rol_id: rolId, area_id: areaId, modo }, { onConflict: 'rol_id,area_id' }))
 }

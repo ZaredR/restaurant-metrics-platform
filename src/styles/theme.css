@@ -1,0 +1,441 @@
+/* ============================================================
+   OMNIREST THEME — look shared with the pilot version
+   (white top bar, floating navy sidebar card, orange actions,
+   condensed headings). Loaded last: it only overrides tokens and
+   shapes, so removing this file restores the previous look.
+   ============================================================ */
+
+:root {
+  /* Brand: navy of the logo + orange */
+  --color-omni-navy-950: #071a33;
+  --color-omni-navy-900: #0b2545;
+  --color-omni-navy-800: #12325a;
+  --color-omni-navy-700: #1d4373;
+  --color-omni-orange-600: #e8772a;
+  --color-omni-orange-500: #f79245;
+  --color-omni-orange-100: #ffe8d6;
+  --color-omni-orange-50:  #fff4ea;
+  --color-omni-sky-50:     #eef3fa;
+  --color-omni-sky-100:    #e2eaf5;
+
+  --color-brand:       var(--color-omni-orange-500);
+  --color-brand-dark:  var(--color-omni-orange-600);
+  --color-brand-light: var(--color-omni-orange-100);
+  --text-brand:        var(--color-omni-orange-600);
+
+  --bg-app:        #f3f6fb;
+  --bg-sidebar:    var(--color-omni-navy-900);
+  --bg-table-head: var(--color-omni-sky-50);
+  --bg-input-focus:#ffffff;
+  --border-color:  #e1e7f0;
+  --border-input:  #c9d3e1;
+  --border-input-focus: var(--color-omni-navy-700);
+  --text-primary:  #0f2747;
+
+  --font-display: 'Barlow Semi Condensed', 'Barlow', var(--font-sans);
+
+  --topbar-height: 76px;
+  --sidebar-width: 248px;
+  --sidebar-collapsed: 76px;
+  --sidebar-gap: 24px;           /* space around the floating sidebar card */
+
+  --radius-card: 16px;
+  --shadow-card: 0 1px 2px rgba(11, 37, 69, 0.05), 0 4px 16px rgba(11, 37, 69, 0.04);
+}
+
+/* ── Headings ───────────────────────────────────────────── */
+.page-title,
+.section-title,
+.card-title,
+.modal-title,
+h1, h2, h3 {
+  font-family: var(--font-display);
+  letter-spacing: 0.005em;
+}
+
+.page-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+
+/* Short orange bar above every page title (as in the pilot version). */
+.page-header > div:first-child::before {
+  content: '';
+  display: block;
+  width: 32px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-brand);
+  margin-bottom: var(--space-3);
+}
+
+.page-subtitle { font-size: 0.95rem; }
+
+.section-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+/* ── Layout: white top bar across, floating sidebar card ── */
+.app-content {
+  margin-left: calc(var(--sidebar-width) + var(--sidebar-gap) * 2);
+}
+.app-content.sidebar-collapsed {
+  margin-left: calc(var(--sidebar-collapsed) + var(--sidebar-gap) * 2);
+}
+.page-body {
+  padding: calc(var(--topbar-height) + var(--space-8)) var(--sidebar-gap) var(--space-8) 0;
+  max-width: none;
+}
+
+.topbar,
+.topbar.collapsed {
+  left: 0;
+  height: var(--topbar-height);
+  padding: 0 var(--sidebar-gap);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: none;
+}
+
+.sidebar {
+  top: calc(var(--topbar-height) + var(--sidebar-gap));
+  left: var(--sidebar-gap);
+  height: auto;
+  max-height: calc(100vh - var(--topbar-height) - var(--sidebar-gap) * 2);
+  border-radius: 20px;
+  border: none;
+  box-shadow: 0 12px 32px rgba(11, 37, 69, 0.18);
+  padding: var(--space-3) 0;
+}
+
+/* ── Sidebar items ──────────────────────────────────────── */
+.sidebar-nav { padding: var(--space-2) var(--space-3); }
+
+.sidebar-group + .sidebar-group {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-group-label {
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0.01em;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 0 var(--space-3) var(--space-2);
+}
+
+.sidebar-item {
+  border-radius: 12px;
+  padding: 0.55rem var(--space-3);
+  color: rgba(255, 255, 255, 0.92);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.sidebar-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.sidebar-item.active {
+  background: var(--color-omni-orange-100);
+  color: var(--color-omni-navy-900);
+  box-shadow: inset 4px 0 0 var(--color-brand);
+}
+
+.sidebar-item.active::before { display: none; }
+
+.sidebar-item.active .sidebar-item-icon {
+  color: var(--color-brand-dark);
+}
+
+.sidebar-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: var(--space-3) var(--space-3) 0;
+}
+.sidebar-user-name { font-family: var(--font-display); font-size: 1rem; font-weight: 600; }
+.sidebar-user-role { color: rgba(255, 255, 255, 0.6); }
+
+/* ── Cards ──────────────────────────────────────────────── */
+.card,
+.kpi-card,
+.table-wrapper {
+  border-radius: var(--radius-card);
+  border-color: var(--border-color);
+  box-shadow: var(--shadow-card);
+}
+
+/* ── Buttons ────────────────────────────────────────────── */
+.btn {
+  border-radius: 10px;
+  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  padding: 0.5rem 1.1rem;
+}
+.btn-sm { font-size: 0.9rem; padding: 0.3rem 0.75rem; }
+.btn-lg { font-size: 1.1rem; }
+
+.btn-primary {
+  background: var(--color-brand);
+  border-color: var(--color-brand);
+  color: var(--color-omni-navy-900);
+}
+.btn-primary:hover {
+  background: var(--color-brand-dark);
+  border-color: var(--color-brand-dark);
+  box-shadow: 0 0 0 3px var(--color-omni-orange-100);
+}
+
+.btn-secondary {
+  background: #fff;
+  border-color: var(--border-input);
+  color: var(--color-omni-navy-900);
+}
+.btn-secondary:hover {
+  background: var(--color-omni-sky-50);
+  border-color: var(--color-omni-navy-700);
+}
+
+.btn-ghost { color: var(--color-omni-navy-800); }
+
+/* ── Tabs as outlined buttons ───────────────────────────── */
+.tabs {
+  border-bottom: none;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.tab-btn {
+  border: 1px solid var(--border-input);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--color-omni-navy-900);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 0.45rem 0.95rem;
+}
+.tab-btn:hover {
+  background: var(--color-omni-sky-50);
+  border-color: var(--color-omni-navy-700);
+}
+.tab-btn.active {
+  background: var(--color-omni-sky-100);
+  border-color: var(--color-omni-navy-800);
+  color: var(--color-omni-navy-900);
+  box-shadow: none;
+}
+
+/* ── Fields ─────────────────────────────────────────────── */
+.form-input,
+.form-select,
+.form-textarea {
+  border-radius: 10px;
+  padding: 0.6rem 0.9rem;
+}
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus {
+  border-color: var(--color-omni-navy-700);
+  box-shadow: 0 0 0 3px var(--color-omni-sky-100);
+}
+.form-label { font-weight: 600; }
+
+/* ── Tables ─────────────────────────────────────────────── */
+.data-table th {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-omni-navy-900);
+}
+.data-table thead { border-bottom: 1px solid var(--border-color); }
+
+/* ── Modal ──────────────────────────────────────────────── */
+.modal { border-radius: 18px; }
+
+/* ── Small screens: the sidebar card hugs the edge ──────── */
+@media (max-width: 768px) {
+  :root { --sidebar-gap: 12px; }
+}
+
+/* ── Top bar contents ───────────────────────────────────── */
+.topbar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  text-decoration: none;
+}
+.topbar-brand-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: block;
+}
+.topbar-brand-name {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--color-omni-navy-900);
+}
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.topbar-user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.2;
+  padding: 0 var(--space-2);
+}
+.topbar-user-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--color-omni-navy-900);
+}
+.topbar-user-role {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.topbar-icon-btn { color: var(--color-omni-navy-900); }
+
+/* ── Sidebar: who is signed in ─────────────────────────── */
+.sidebar-profile {
+  padding: var(--space-2) var(--space-4) var(--space-3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: var(--space-2);
+}
+.sidebar-profile--collapsed {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-2) 0 var(--space-3);
+}
+.sidebar-profile-label {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #fff;
+  margin-bottom: var(--space-2);
+}
+.sidebar-profile-box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0.6rem 0.8rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: var(--color-omni-navy-800);
+}
+.sidebar-profile-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-profile-role {
+  font-size: var(--text-xs);
+  color: var(--color-omni-orange-500);
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .topbar-user { display: none; }
+  .topbar-brand-name { font-size: 1.3rem; }
+}
+
+/* ── Phones: the menu is a drawer over the page ────────── */
+@media (max-width: 768px) {
+  .app-content,
+  .app-content.sidebar-collapsed { margin-left: 0; }
+  .page-body { padding: calc(var(--topbar-height) + var(--space-4)) var(--space-4) var(--space-6); }
+  .sidebar {
+    z-index: calc(var(--z-topbar) + 1);
+    width: min(280px, calc(100vw - 32px)) !important;
+    transition: transform var(--transition-sidebar) !important;
+  }
+  .sidebar.is-collapsed { transform: translateX(calc(-100% - 2 * var(--sidebar-gap))); }
+  .sidebar-overlay { display: block !important; z-index: var(--z-topbar) !important; }
+  .topbar-logout { padding: 0.35rem 0.7rem; font-size: 0.9rem; }
+}
+
+/* ── Horarios: custom hours link and print ─────────────── */
+.schedule-hours {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: var(--text-xs);
+  color: var(--text-brand);
+  text-align: left;
+  cursor: pointer;
+}
+.print-only { display: none; }
+
+@media print {
+  .sidebar, .topbar, .no-print, .sidebar-overlay { display: none !important; }
+  .print-only { display: inline; }
+  .app-content, .app-content.sidebar-collapsed { margin-left: 0 !important; }
+  .page-body { padding: 0 !important; }
+  body { background: #fff; }
+  .page-header > div:first-child::before { display: none; }
+  .data-table { font-size: 11px; }
+  .data-table th, .data-table td { padding: 4px 6px; }
+}
+
+/* ── Local: ranges of tables per area ──────────────────── */
+.floor-ranges {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.floor-range { padding: var(--space-4) var(--space-5); }
+.floor-range-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-2); }
+.floor-range-chip {
+  padding: 2px 10px;
+  border-radius: 8px;
+  background: var(--color-omni-sky-50);
+  border: 1px solid var(--border-color);
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--color-omni-navy-900);
+}
+
+/* ── Rol diario: mode per area, runners by function ────── */
+.mode-switch { display: flex; gap: 6px; flex-wrap: wrap; }
+.mode-switch-btn {
+  border: 1px solid var(--border-input);
+  border-radius: 10px;
+  background: #fff;
+  padding: 0.4rem 0.9rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--color-omni-navy-900);
+  cursor: pointer;
+}
+.mode-switch-btn.active {
+  background: var(--color-omni-sky-100);
+  border-color: var(--color-omni-navy-800);
+  box-shadow: inset 3px 0 0 var(--color-brand);
+}
+.mode-switch-btn:disabled { cursor: default; }
+.mode-switch-btn:not(.active):disabled { opacity: 0.55; }
+.roster-area--off { background: var(--color-omni-sky-50); }
+.runner-functions {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-4);
+}
+.runner-function {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+}

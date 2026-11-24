@@ -3,7 +3,7 @@ import TodaySummary from './TodaySummary'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import KPICard from '../../components/ui/KPICard'
 import { currency, number } from '../../utils/formatters'
-import { ROUTES } from '../../constants/routes'
+import { ROUTES, isHiddenRoute } from '../../constants/routes'
 
 const kpis = [
   { label: 'Ventas de mi unidad', value: 74500, trend: 6.2, accentColor: 'var(--color-green-500)', iconBg: 'var(--color-green-100)', iconColor: 'var(--color-green-600)' },
@@ -67,7 +67,7 @@ export default function DashboardSupervisor() {
           <div className="card card-sm">
             <div className="card-header">
               <h3 className="card-title">Ranking de mi unidad</h3>
-              <Link to={ROUTES.RANKINGS} className="btn btn-ghost btn-sm">Ver →</Link>
+              {!isHiddenRoute(ROUTES.RANKINGS) && <Link to={ROUTES.RANKINGS} className="btn btn-ghost btn-sm">Ver →</Link>}
             </div>
             <div className="ranking-list">
               {rendimientoMeseros.slice(0,3).map((m, i) => (
@@ -86,7 +86,7 @@ export default function DashboardSupervisor() {
           <div className="card card-sm">
             <div className="card-header">
               <h3 className="card-title">Avisos</h3>
-              <Link to={ROUTES.NOTICES} className="btn btn-ghost btn-sm">Ver →</Link>
+              {!isHiddenRoute(ROUTES.NOTICES) && <Link to={ROUTES.NOTICES} className="btn btn-ghost btn-sm">Ver →</Link>}
             </div>
             {avisos.map((a) => (
               <div key={a.titulo} className={`notice-card ${a.unread ? 'unread' : ''}`} style={{ marginBottom: 'var(--space-2)' }}>

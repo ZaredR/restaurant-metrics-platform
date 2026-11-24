@@ -1,18 +1,19 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import { useState } from 'react'
 import { useAuthStore } from '../../store/auth.store'
 import { ROUTES, isHiddenRoute } from '../../constants/routes'
 import { PERMISSIONS } from '../../constants/permissions'
 import Avatar from '../ui/Avatar'
+import { ROLE_LABELS } from '../../constants/roles'
 
 /* ── Icons (inline SVG, no lib dependency) ─────────── */
-const Icon = ({ d, size = 18 }) => (
+export const Icon = ({ d, size = 18 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <path d={d} />
   </svg>
 )
 
-const icons = {
+export const icons = {
   dashboard:   'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10',
   restaurants: 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
   users:       'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75 M9 7a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',
@@ -36,13 +37,14 @@ const icons = {
   roster:      'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2 M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2 2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2z M9 12h6 M9 16h6',
   schedules:   'M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
   absences:    'M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M3 10h18 M9.5 14.5l5 5 M14.5 14.5l-5 5',
+  devices:     'M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z M12 18h.01',
 }
 
 const NAV_GROUPS = [
   {
     label: 'Principal',
     items: [
-      { to: ROUTES.DASHBOARD, label: 'Dashboard', icon: 'dashboard', permission: null },
+      { to: ROUTES.DASHBOARD, label: 'Inicio', icon: 'dashboard', permission: null },
     ],
   },
   {
@@ -82,6 +84,7 @@ const NAV_GROUPS = [
     items: [
       { to: ROUTES.CONFIG,  label: 'Configuración', icon: 'config',  permission: PERMISSIONS.VIEW_CONFIG },
       { to: ROUTES.ACCOUNTS, label: 'Usuarios',     icon: 'users',   permission: PERMISSIONS.MANAGE_USERS },
+      { to: ROUTES.DEVICES,  label: 'Dispositivos', icon: 'devices', permission: PERMISSIONS.MANAGE_DEVICES },
       { to: ROUTES.PROFILE, label: 'Mi perfil',     icon: 'profile', permission: null },
       { to: ROUTES.AUDIT,   label: 'Auditoría',     icon: 'audit',   permission: PERMISSIONS.VIEW_AUDIT },
     ],
@@ -89,13 +92,7 @@ const NAV_GROUPS = [
 ]
 
 export default function Sidebar({ collapsed, onToggle }) {
-  const { user, logout, hasPermission } = useAuthStore()
-  const navigate = useNavigate()
-
-  const handleLogout = () => {
-    logout()
-    navigate(ROUTES.LOGIN)
-  }
+  const { user, hasPermission } = useAuthStore()
 
   return (
     <>
@@ -114,30 +111,25 @@ export default function Sidebar({ collapsed, onToggle }) {
       )}
 
       <aside
-        className="sidebar"
+        className={`sidebar ${collapsed ? 'is-collapsed' : ''}`}
         style={{
           width: collapsed ? 'var(--sidebar-collapsed)' : 'var(--sidebar-width)',
           transition: 'width var(--transition-sidebar)',
         }}
       >
-        {/* Brand */}
-        <div className={`sidebar-brand ${collapsed ? 'sidebar-brand--collapsed' : ''}`}>
-          {/* OmniRest logo; collapsed shows the chef-hat icon. */}
-          <div className={`sidebar-logo ${collapsed ? 'sidebar-logo--icon' : ''}`}>
-            {collapsed
-              ? <img src="/omnirest-icon.png" alt="OmniRest" className="sidebar-logo-img" />
-              : <img src="/omnirest-logo.jpg" alt="OmniRest — Gestión Operativa para Restaurantes" className="sidebar-logo-img" />}
-          </div>
-          {!collapsed && <div className="sidebar-brand-text" />}
-          <button className="sidebar-collapse-btn" onClick={onToggle} title={collapsed ? 'Expandir' : 'Colapsar'}>
-            <svg
-              width="16" height="16" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" strokeWidth="2"
-              style={{ transform: collapsed ? 'rotate(180deg)' : 'none', transition: 'transform var(--transition-base)' }}
-            >
-              <path d={icons.chevron} />
-            </svg>
-          </button>
+        {/* Who is signed in (the pilot version shows the active branch here; we run one restaurant). */}
+        <div className={`sidebar-profile ${collapsed ? 'sidebar-profile--collapsed' : ''}`}>
+          {collapsed
+            ? <span title={`${user?.nombre ?? ''} · ${ROLE_LABELS[user?.rol] ?? ''}`}><Avatar name={user?.nombre ?? 'Usuario'} size="sm" /></span>
+            : (
+              <>
+                <span className="sidebar-profile-label">Tu perfil</span>
+                <div className="sidebar-profile-box">
+                  <span className="sidebar-profile-name">{user?.nombre}</span>
+                  <span className="sidebar-profile-role">{ROLE_LABELS[user?.rol] ?? user?.rol}</span>
+                </div>
+              </>
+            )}
         </div>
 
         {/* Navigation */}
@@ -145,6 +137,8 @@ export default function Sidebar({ collapsed, onToggle }) {
           {NAV_GROUPS.map((group) => {
             const visible = group.items.filter(
               (item) => !isHiddenRoute(item.to) && (item.permission == null || hasPermission(item.permission))
+                // A tablet has no personal profile.
+                && !(user?.dispositivo && item.to === ROUTES.PROFILE)
             )
             if (visible.length === 0) return null
             return (
@@ -158,6 +152,7 @@ export default function Sidebar({ collapsed, onToggle }) {
                       `sidebar-item ${isActive ? 'active' : ''}`
                     }
                     title={collapsed ? item.label : undefined}
+                    onClick={() => { if (window.innerWidth <= 768) onToggle() }}
                   >
                     <span className="sidebar-item-icon">
                       <Icon d={icons[item.icon]} />
@@ -170,29 +165,6 @@ export default function Sidebar({ collapsed, onToggle }) {
           })}
         </nav>
 
-        {/* User info + logout */}
-        <div className="sidebar-footer">
-          {!collapsed && user && (
-            <div className="sidebar-user">
-              <Avatar name={user.nombre} size="sm" />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p className="sidebar-user-name">{user.nombre}</p>
-                <p className="sidebar-user-role">{user.rol}</p>
-              </div>
-            </div>
-          )}
-          <button
-            className="sidebar-item sidebar-logout"
-            onClick={handleLogout}
-            title="Cerrar sesión"
-            style={{ marginTop: collapsed ? 0 : 4 }}
-          >
-            <span className="sidebar-item-icon">
-              <Icon d={icons.logout} />
-            </span>
-            {!collapsed && <span className="sidebar-item-label">Salir</span>}
-          </button>
-        </div>
       </aside>
     </>
   )

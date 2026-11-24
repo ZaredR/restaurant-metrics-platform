@@ -1,0 +1,174 @@
+/* ── Inicio: banner, quick access and today's numbers ─────── */
+
+.home-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: center;
+  padding: var(--space-10) var(--space-10);
+  margin-bottom: var(--space-8);
+  border-radius: 24px;
+  color: #fff;
+  overflow: hidden;
+  /* Navy with faint concentric rings, as in the pilot version. */
+  background:
+    repeating-radial-gradient(circle at 78% 60%, rgba(255, 255, 255, 0.045) 0 2px, transparent 2px 34px),
+    linear-gradient(135deg, var(--color-omni-navy-900), var(--color-omni-navy-700));
+}
+
+.home-eyebrow {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: var(--color-omni-orange-500);
+  margin-bottom: var(--space-2);
+}
+
+.home-title {
+  font-family: var(--font-display);
+  font-size: clamp(2.4rem, 5vw, 4rem);
+  font-weight: 700;
+  line-height: 1.05;
+  color: #fff;
+  margin-bottom: var(--space-6);
+}
+
+.home-today {
+  padding: var(--space-6);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(7, 26, 51, 0.45);
+}
+
+.home-today-title {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.home-today-date {
+  color: rgba(255, 255, 255, 0.85);
+  margin: var(--space-2) 0 var(--space-4);
+}
+
+.home-today-text { color: rgba(255, 255, 255, 0.9); }
+
+.home-today-roles {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.home-today-roles li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  font-weight: 600;
+}
+
+.home-today-warn {
+  font-size: var(--text-sm);
+  color: var(--color-omni-orange-500);
+}
+
+.home-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.home-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-4);
+}
+
+.home-shortcut {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.home-shortcut:hover {
+  border-color: var(--color-brand);
+  transform: translateY(-1px);
+}
+
+.home-shortcut-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--color-omni-orange-50);
+  color: var(--color-brand-dark);
+}
+
+.home-shortcut-body { flex: 1; min-width: 0; }
+
+.home-shortcut-title {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--color-omni-navy-900);
+}
+
+.home-shortcut-text {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.home-shortcut-arrow { color: var(--color-omni-navy-800); }
+
+.home-side-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.home-stats { margin: 0; }
+
+.home-stats div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.home-stats dt { color: var(--text-secondary); }
+
+.home-stats dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--color-omni-navy-900);
+}
+
+@media (max-width: 1024px) {
+  .home-hero, .home-grid { grid-template-columns: minmax(0, 1fr); }
+  .home-hero { padding: var(--space-8) var(--space-6); }
+}

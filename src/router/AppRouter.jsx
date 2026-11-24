@@ -37,6 +37,8 @@ const SurveysPage      = lazy(() => import('../pages/surveys/SurveysPage'))
 const AlertsPage       = lazy(() => import('../pages/alerts/AlertsPage'))
 const AccountsPage     = lazy(() => import('../pages/accounts/AccountsPage'))
 const ResetPassword    = lazy(() => import('../pages/auth/ResetPassword'))
+const LinkDevice       = lazy(() => import('../pages/auth/LinkDevice'))
+const DevicesPage      = lazy(() => import('../pages/devices/DevicesPage'))
 
 /* ── Guards ─────────────────────────────────────────── */
 function RequireAuth() {
@@ -86,6 +88,8 @@ export default function AppRouter() {
         </Route>
         {/* Link of the recovery email: open with or without a session in the app */}
         <Route path={ROUTES.RESET_PASSWORD} element={<ResetPassword />} />
+        {/* Link generated in Dispositivos, opened on the tablet */}
+        <Route path={ROUTES.LINK_DEVICE} element={<LinkDevice />} />
 
         {/* Protected */}
         <Route element={<RequireAuth />}>
@@ -165,6 +169,9 @@ export default function AppRouter() {
             </Route>
             <Route element={<RequirePermission permission={PERMISSIONS.MANAGE_USERS} />}>
               <Route path={ROUTES.ACCOUNTS} element={<AccountsPage />} />
+            </Route>
+            <Route element={<RequirePermission permission={PERMISSIONS.MANAGE_DEVICES} />}>
+              <Route path={ROUTES.DEVICES} element={<DevicesPage />} />
             </Route>
           </Route>
           </Route>

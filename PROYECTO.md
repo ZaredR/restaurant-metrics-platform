@@ -20,7 +20,7 @@ La referencia funcional es el documento **"Contextualización ampliada del proye
 | Gráficas | Recharts |
 | Parseo de archivos | PapaParse (CSV) + SheetJS/xlsx (Excel) |
 | Estilos | CSS puro con variables (sin Tailwind ni UI library) |
-| Deploy | Firebase Hosting |
+| Deploy | Cloudflare Pages |
 
 ---
 
@@ -30,7 +30,6 @@ La referencia funcional es el documento **"Contextualización ampliada del proye
 restaurant-metrics-platform/
 ├── index.html
 ├── vite.config.js
-├── firebase.json           # Configuración de deploy en Firebase Hosting
 ├── .env.example            # Variables de entorno requeridas
 └── src/
     ├── main.jsx            # Entry point — monta React y carga estilos globales
@@ -92,11 +91,11 @@ El router carga todas las páginas de forma **lazy** (code splitting automático
 | `/dashboard` | Dashboard | Autenticado |
 | `/profile` | Profile | Autenticado |
 | `/metrics` | MetricsDashboard (indicadores operativos reales) — requiere Supabase | Autenticado (`VIEW_METRICS`) |
-| `/rankings` | RankingGeneral | Autenticado |
-| `/incentives` | IncentiveList | Autenticado |
-| `/incentives/new`, `/incentives/:id/edit` | IncentiveForm | Autenticado |
-| `/notices` | NoticeList | Autenticado |
-| `/notices/new` | NoticeCreate | Autenticado |
+| `/rankings` | RankingGeneral — **oculta** (redirige al Dashboard) | Autenticado |
+| `/incentives` | IncentiveList — **oculta** (redirige al Dashboard) | Autenticado |
+| `/incentives/new`, `/incentives/:id/edit` | IncentiveForm — **oculta** (redirige al Dashboard) | Autenticado |
+| `/notices` | NoticeList — **oculta** (redirige al Dashboard) | Autenticado |
+| `/notices/new` | NoticeCreate — **oculta** (redirige al Dashboard) | Autenticado |
 | `/history` | History | Autenticado |
 | `/reports` | ReportHistory | `UPLOAD_REPORTS` |
 | `/reports/upload` | ReportUpload | `UPLOAD_REPORTS` |
@@ -107,6 +106,8 @@ El router carga todas las páginas de forma **lazy** (code splitting automático
 | `/config` | Config | `VIEW_CONFIG` |
 | `/audit` | Audit (cambios reales y exportaciones) — requiere Supabase | `VIEW_AUDIT` |
 | `/accounts` | AccountsPage (usuarios, invitaciones, matriz de permisos) — requiere Supabase | `MANAGE_USERS` |
+| `/devices` | DevicesPage (tablets de recepción y encuestas: alta, enlace y revocación) — requiere Supabase | `MANAGE_DEVICES` |
+| `/vincular/:token` | LinkDevice (la tablet canjea su enlace; ruta pública) | — |
 | `/staff` | StaffList (personal) — requiere Supabase | `VIEW_STAFF` |
 | `/floor` | FloorConfig (áreas, estaciones, mesas) — requiere Supabase | `VIEW_FLOOR` |
 | `/schedules` | WeeklySchedule (horario semanal) — requiere Supabase | `VIEW_SCHEDULES` (editar: `MANAGE_SCHEDULES`) |
@@ -187,7 +188,7 @@ publicado / modificado ──(Cerrar rol)──► cerrado
 
 **Métricas e indicadores** (contextualización, sección 8; decisiones del 2026-11-22):
 
-- **Métricas** ahora muestra indicadores reales en lugar de las ventas de ejemplo de la versión anterior (el código anterior queda en el historial de git). Rankings e Incentivos siguen con sus datos de ejemplo.
+- **Métricas** ahora muestra indicadores reales en lugar de las ventas de ejemplo de la versión anterior (el código anterior queda en el historial de git).
 - Periodo: hoy, 7, 30 o 90 días, o fechas libres, hasta un año.
 - Lo calcula la función `indicadores(desde, hasta)`, que decide qué ve cada perfil:
   - **Gerencia, capitán y supervisor:**
@@ -233,14 +234,42 @@ publicado / modificado ──(Cerrar rol)──► cerrado
 - Antes de generar el archivo, `registrar_exportacion` revisa el permiso y deja registro (qué, filtros, filas, quién y cuándo). Si falla, no se descarga nada.
 - **Auditoría** (admin) muestra los cambios reales: quién, módulo, acción y campos que cambiaron. También muestra el registro de exportaciones. Reemplaza los logs de ejemplo de la versión anterior.
 
+**Diseño** (2026-11-23, tomado de la versión piloto del equipo):
+- Todo el aspecto visual está en [src/styles/theme.css](src/styles/theme.css), que se carga al final: colores azul marino y naranja, títulos en *Barlow Semi Condensed*, botones y pestañas redondeados. Si se quita ese archivo, se recupera el aspecto anterior.
+- **Barra superior** blanca: botón de menú, logo, campana de alertas, usuario y *Cerrar sesión*.
+- **Barra lateral**: tarjeta azul flotante con el bloque "Tu perfil"; en el celular se abre como cajón.
+- **Inicio** ([HomePage.jsx](src/pages/dashboard/HomePage.jsx)):
+  - banner "Panel de operación" con la jornada de hoy;
+  - accesos rápidos según el perfil;
+  - el panel "Hoy" para gerencia, supervisión y capitanes.
+- Los dashboards de ventas de la versión anterior (`DashboardAdmin`, `DashboardSupervisor`, `DashboardMesero`) siguen en el código, pero ya no se muestran.
+
+**Funciones tomadas de la versión piloto** (2026-11-23):
+
+- **Horarios por hora:** cada día se elige un turno, *Personalizado…* (hora de entrada y salida) o *Descanso*. La base deriva el turno con el que más se traslapa (`derivar_turno_horario`), así el rol diario sigue funcionando por turno. La semana se **publica** (`publicar_semana`): mientras está en borrador, el personal no ve sus horarios. *Imprimir semana* usa la impresión del navegador.
+- **Mesas por área y sin estación:** cada mesa pertenece a un área; la estación es opcional. En **Local → Mesas** se ven los rangos por área ("Salón · 1–12") y se agregan rangos eligiendo área y, si aplica, estación.
+- **Modo de trabajo por área en el Rol diario:**
+  - *Estaciones* (como antes): cada estación con su mesero.
+  - *TIROS*: varios meseros sin estación; al sentar, la Hostess propone al que lleva **menos comensales** (`mesero_siguiente_tiro`) y puede elegir otro del área.
+  - *Sin servicio*: sus mesas no se asignan ese turno.
+  - Conflictos y alertas avisan de estaciones sin mesero solo en áreas por estaciones, de mesas sin estación en esas áreas y de áreas en TIROS sin meseros.
+- **Runners por función:** catálogo en **Local → Funciones de runner** (Fría, Caliente, Descamoche, Stand boy) y tarjeta *Runners por función* en el Rol diario.
+- **Dispositivos vinculados** (`/devices`, gerente y admin):
+  1. Se da de alta la tablet con su función: *Hostess* (recepción y encuestas) o *Encuestas* (solo captura).
+  2. Se genera un **enlace de un solo uso** que vence en 24 h; en la base solo queda su hash.
+  3. La tablet abre el enlace, entra con una **sesión anónima** de Supabase y queda vinculada, sin contraseña personal.
+  4. **Revocar** le quita el acceso al instante; al abrir la app, la tablet revocada regresa al login.
+  - En la auditoría aparece como «Dispositivo: nombre». Las cuentas personales de hostess siguen funcionando igual.
+  - Requisito: en Supabase, *Authentication → Sign In / Providers → Allow anonymous sign-ins* activado.
+
 Cualquier ruta desconocida redirige a `/dashboard`.
 
 `/dashboard` muestra una vista distinta según el rol: `DashboardAdmin` (admin y gerente), `DashboardSupervisor` o `DashboardMesero`.
 
 > **Estado actual:**
 > - Las pantallas de la nueva versión trabajan con Supabase: Personal, Local, Hostess, Rol diario, Cierre, Encuestas, Alertas, Horarios, Ausencias, Métricas, Usuarios, Auditoría y el bloque "Hoy" del Dashboard.
-> - **Siguen con datos de ejemplo** de la versión anterior: el resto del Dashboard (ventas), Rankings, Incentivos y Avisos.
-> - Están ocultas, y su URL redirige al Dashboard: Restaurantes, Usuarios (versión anterior), Reportes, Historial y Configuración.
+> - **Sigue con datos de ejemplo** de la versión anterior: el resto del Dashboard (ventas, debajo del bloque "Hoy"); sus enlaces a pantallas ocultas ya no se muestran.
+> - Están ocultas, y su URL redirige al Dashboard (`HIDDEN_ROUTES`): Restaurantes, Usuarios (versión anterior), Reportes, Historial, Configuración, Rankings, Incentivos y Avisos.
 
 ---
 
@@ -292,7 +321,7 @@ Navigate → /dashboard
 El guard `RequireAuth` en el router verifica `store.user`. Si no existe, redirige a `/login`.
 
 - Si la cuenta no tiene perfil en `usuarios`, o el perfil está desactivado, el login se rechaza con un mensaje claro y se cierra la sesión de Supabase.
-- **Recuperar contraseña:** `/recover-password` envía el correo y el enlace abre `/reset-password`, donde se elige la nueva contraseña. Para que funcione, en Supabase → Authentication → URL Configuration hay que agregar `http://localhost:5173/reset-password` y la URL de producción a **Redirect URLs**.
+- **Recuperar contraseña:** `/recover-password` envía el correo y el enlace abre `/reset-password`, donde se elige la nueva contraseña. Para que funcione, las URLs de la app deben estar en Supabase → Authentication → URL Configuration (ver "Deploy").
 El guard `RequirePermission` verifica `ROLE_PERMISSIONS[user.rol]` antes de renderizar rutas protegidas.
 
 ---
@@ -336,7 +365,10 @@ supabase/
 │   ├── 20261126120000_alertas.sql            # Alertas por evento y por umbral, destinatarios y atención
 │   ├── 20261127120000_usuarios_y_perfiles.sql # Perfil analista, invitaciones y protección de usuarios
 │   ├── 20261128120000_exportaciones_y_auditoria.sql # Registro de exportaciones y vista de auditoría
-│   └── 20261129120000_zona_horaria.sql       # "Hoy" en la zona del restaurante (Supabase usa UTC)
+│   ├── 20261129120000_zona_horaria.sql       # "Hoy" en la zona del restaurante (Supabase usa UTC)
+│   ├── 20261130120000_horarios_por_hora.sql  # Horario con hora de entrada/salida y publicación de la semana
+│   ├── 20261201120000_mesas_por_area_y_tiros.sql # Mesas por área, modo TIROS / sin servicio y runners por función
+│   └── 20261202120000_dispositivos_vinculados.sql # Tablets con enlace de un solo uso; lecturas solo con perfil o dispositivo
 ├── seed.sql                                  # Datos de ejemplo (fechas relativas a hoy)
 └── tests/
     └── reglas_operativas.sql                 # Pruebas de reglas (se revierten al terminar)
@@ -348,8 +380,10 @@ supabase/
 |---|---|
 | Personal | `empleados`, `usuarios` (login, ligado a `empleado_id`), `configuracion` |
 | Disponibilidad | `ausencias`, `turnos`, `horarios`, `empleado_autorizaciones` (áreas/estaciones permitidas), `empleado_restricciones`, `rol_excepciones` |
-| Catálogo del local | `areas`, `estaciones`, `mesas` |
-| Rol diario | `roles_diarios` (borrador → en revisión → publicado → modificado → cerrado), `rol_asignaciones`, `rol_ajustes` |
+| Catálogo del local | `areas`, `estaciones`, `mesas` (área obligatoria, estación opcional), `funciones_runner` |
+| Rol diario | `roles_diarios` (borrador → en revisión → publicado → modificado → cerrado), `rol_asignaciones`, `rol_ajustes`, `rol_areas` (modo de cada área) |
+| Horarios | `horarios_semanas` (borrador / publicada) |
+| Dispositivos | `dispositivos` (pendiente → vinculado → revocado) |
 | Reasignaciones | `visita_reasignaciones` (cambios de mesero responsable con motivo) |
 | Hostess | `visitas` (comensales = adultos + niños × 0.5, columna calculada) |
 | Cierre | `cierres` (borrador → propuesto → autorizado), `cierre_participantes`, `cierre_eventos` |
@@ -360,7 +394,8 @@ supabase/
 ### Reglas que aplica la base de datos
 
 - No se programa ni se asigna al rol a un empleado con **ausencia aprobada** ese día (configurable con `configuracion.ausencias_bloquean`).
-- Cada mesa pertenece a una sola estación; un mesero por estación y un capitán por área en cada rol.
+- Cada mesa pertenece a un área y, opcionalmente, a una estación; un mesero por estación y un capitán por área en cada rol.
+- El modo del área en el rol (`rol_areas`) decide quién atiende: el mesero de la estación, el siguiente en TIROS o nadie (sin servicio).
 - Al asignar mesa a una visita, el trigger obtiene **estación → área → mesero → capitán** del rol publicado y guarda una copia, para que el historial no cambie si después se edita el rol.
 - Una mesa solo puede tener una visita sentada a la vez; solo se asignan mesas en roles publicados.
 - `enviar_rol_a_revision(id)`, `publicar_rol(id)` (solo gerencia), `regresar_rol_a_borrador(id)` y `cerrar_rol(id)` controlan el ciclo del rol; un trigger impide saltarse el flujo cambiando el estado directo.
@@ -375,6 +410,10 @@ supabase/
 | Objeto | Para qué |
 |---|---|
 | `v_mesas_asignadas` | Mesa → estación → área → mesero → capitán de cada rol |
+| `v_mesas_rol` | Por rol y mesa: modo del área, mesero (por estaciones) y si se puede sentar |
+| `mesero_siguiente_tiro(rol, área)` | Mesero en TIROS con menos comensales (luego menos mesas) |
+| `publicar_semana(lunes, publicar)` | Publica o regresa a borrador los horarios de una semana |
+| `crear_dispositivo`, `generar_enlace_dispositivo`, `vincular_dispositivo`, `mi_dispositivo`, `revocar_dispositivo` | Alta, enlace de un solo uso, vinculación de la tablet y revocación |
 | `v_comensales_mesero` | Comensales y mesas atendidas por mesero en cada rol |
 | `v_orden_salida` | Meseros de cierre por área, de menos a más comensales |
 | `v_encuestas_contexto` | Cada respuesta con mesa, mesero, capitán, área, turno y promedio |
@@ -400,7 +439,8 @@ supabase/
 | admin, gerente | Todo lo anterior, configuración, encuestas y reglas de alerta |
 | rrhh | Empleados, ausencias, horarios, áreas permitidas y restricciones |
 | capitan, supervisor | Rol diario y visitas |
-| hostess | Visitas, estado de las mesas y captura de encuestas |
+| hostess (persona o tablet de recepción) | Visitas, estado de las mesas y captura de encuestas |
+| tablet de encuestas | Solo captura de encuestas |
 | mesero, runner | Nada; solo consultan |
 
 | Quién | Puede leer |
@@ -412,7 +452,7 @@ supabase/
 - Los nombres de los compañeros salen de la vista `empleados_directorio` (id, nombre, puesto, activo), que no expone teléfono, correo ni fechas.
 - Un rol en **borrador** solo lo ven quienes lo arman.
 - La auditoría solo la lee `admin`.
-- **Sin sesión (`anon`) no se puede leer nada ni ejecutar ninguna función.** A las funciones nuevas se les quita el permiso por defecto; hay que dar `grant execute` explícito a `authenticated` cuando la app las use.
+- **Sin sesión (`anon`) no se puede leer nada ni ejecutar ninguna función.** Una sesión anónima de Supabase sin dispositivo vinculado tampoco lee nada: los catálogos, el rol y el directorio piden `rol_actual()` (perfil activo o tablet vinculada). A las funciones nuevas se les quita el permiso por defecto; hay que dar `grant execute` explícito a `authenticated` cuando la app las use.
 - `ausencia_en` y `config_bool` son internas: solo las usan los triggers, que corren como dueño de la base (`security definer`).
 
 > Al capturar encuestas con rol `hostess`, inserta sin pedir la fila de vuelta (`return=minimal`): la hostess puede registrar respuestas pero no leerlas.
@@ -438,7 +478,7 @@ Una migración ya aplicada **nunca se edita**: los cambios van en una migración
 
 > Si el proyecto ya tiene tablas `usuarios` o `restaurantes`, la primera migración falla: hay que revisarlas antes de aplicarla.
 
-Pruebas de reglas (con las migraciones y el seed cargados): corre `supabase/tests/reglas_operativas.sql` en el SQL Editor (o con `psql`). Deben aparecer los mensajes `OK 1` a `OK 21`. Todo se revierte al terminar, así que no cambia los datos. Las pruebas esperan los datos del seed tal como se crearon.
+Pruebas de reglas (con las migraciones y el seed cargados): corre `supabase/tests/reglas_operativas.sql` en el SQL Editor (o con `psql`). Deben aparecer los mensajes `OK 1` a `OK 24`. Todo se revierte al terminar, así que no cambia los datos. Las pruebas esperan los datos del seed tal como se crearon.
 
 Usuarios de login:
 
@@ -525,20 +565,39 @@ npm run preview
 
 # Lint
 npm run lint
-
-# Deploy a Firebase (requiere firebase-tools instalado)
-firebase deploy
 ```
+
+El deploy no tiene comando: se hace solo al hacer push (ver "Deploy").
 
 ---
 
 ## Deploy
 
-El proyecto se despliega en **Firebase Hosting**. El archivo [firebase.json](firebase.json) configura:
-- Carpeta pública: `dist/` (salida de Vite)
-- Rewrite `**` → `index.html` para que el routing del lado del cliente funcione correctamente
-- Cache de 1 año para assets estáticos (`.js`, `.css`)
-- Headers de seguridad: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`
+La app está publicada en **Cloudflare Pages**: **https://omnirest.pages.dev** (proyecto `omnirest`, conectado al repo de GitHub).
+
+| Ajuste | Valor |
+|---|---|
+| Rama de producción | `develop` (pasar a `main` cuando `main` esté al día) |
+| Framework preset | React (Vite) |
+| Build command | `npm run build` |
+| Build output directory | `dist` |
+| Variables de entorno | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `NODE_VERSION=22` |
+
+- **Cada push** a la rama de producción se publica solo en un par de minutos. Un push a otra rama genera una URL de prueba aparte (`<rama>.omnirest.pages.dev`).
+- Las variables `VITE_*` se meten al código durante el build. Si se cambian en Cloudflare (Settings → Variables and Secrets), hay que volver a desplegar (Deployments → Retry deployment).
+- Las rutas de React funcionan al recargar sin configuración extra: Pages sirve `index.html` cuando el build no trae `404.html`.
+
+**Supabase → Authentication → URL Configuration:**
+
+- **Site URL:** `https://omnirest.pages.dev`
+- **Redirect URLs:**
+  - `https://omnirest.pages.dev/**`
+  - `https://*.omnirest.pages.dev/**` (URLs de prueba)
+  - `http://localhost:5173/**` (desarrollo)
+
+Sin esto, el correo de recuperar contraseña manda a `localhost`.
+
+> El plan gratuito de Supabase pausa el proyecto tras unos 7 días sin uso. Si la app deja de cargar datos, revisa primero que el proyecto esté activo en el dashboard de Supabase.
 
 ---
 
@@ -567,17 +626,16 @@ initials(nombre)      // "LC" (Luis Cervantes)
   - `xlsx`: grave, sin versión corregida. Solo la usa la subida de reportes, que está oculta.
   - `react-router`: moderada. Se resuelve actualizándolo.
 - `@supabase/ssr` está instalado pero no se usa.
-- **Rutas de la versión anterior sin guard de permiso:** `/incentives/new`, `/incentives/:id/edit` y `/notices/new` solo exigen sesión.
 - **Rutas declaradas pero sin página:** `/reports/:id`, `/metrics/waiter/:id`, `/rankings/:id`, `/notices/:id`, etc.
 
 **Pantallas de la versión anterior con datos de ejemplo**
-- Dashboard (ventas, debajo del bloque "Hoy"), Rankings, Incentivos y Avisos.
+- Dashboard (ventas, debajo del bloque "Hoy"). Rankings, Incentivos y Avisos quedaron ocultos (2026-11-23).
 - Falta decidir con el cliente si se ocultan o se reemplazan.
 
 **Frente al documento de contextualización (cubierto en parte)**
-- **3.1:** disponibilidad por hora; hoy se maneja por turno.
+- **3.1:** disponibilidad por hora: el horario ya acepta horas (se deriva el turno), pero la disponibilidad y el rol siguen por turno.
 - **4.2:** observaciones e incidencias del rol. El campo `roles_diarios.notas` existe, pero no tiene pantalla.
-- **5:** runners por estación, compartidos o solo en horas de alta demanda; hoy se asignan por área o en general.
+- **5:** runners por estación o solo en horas de alta demanda; hoy se asignan por área o por función de cocina.
 - **6:** campos opcionales de la visita (observaciones, motivo de espera).
 - **10:**
   - conservación y eliminación de datos (plazos pendientes del cliente);

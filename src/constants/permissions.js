@@ -41,6 +41,8 @@ export const PERMISSIONS = {
   MANAGE_ALERT_RULES:  'MANAGE_ALERT_RULES',
   /* Exportar datos: permiso sensible, cada exportación queda registrada */
   EXPORT_DATA:         'EXPORT_DATA',
+  /* Tablets vinculadas con enlace de un solo uso */
+  MANAGE_DEVICES:      'MANAGE_DEVICES',
 }
 
 export const ROLE_PERMISSIONS = {
@@ -78,6 +80,7 @@ export const ROLE_PERMISSIONS = {
     PERMISSIONS.VIEW_ALERTS,
     PERMISSIONS.MANAGE_ALERT_RULES,
     PERMISSIONS.EXPORT_DATA,
+    PERMISSIONS.MANAGE_DEVICES,
   ],
 
   [ROLES.SUPERVISOR]: [
@@ -151,5 +154,14 @@ export const ROLE_PERMISSIONS = {
   [ROLES.ANALISTA]: [
     PERMISSIONS.VIEW_METRICS,
     PERMISSIONS.VIEW_NOTICES,
+  ],
+
+  /* Tablets: solo su pantalla */
+  [ROLES.DISPOSITIVO_HOSTESS]: [
+    PERMISSIONS.HOSTESS_DESK,
+    PERMISSIONS.CAPTURE_SURVEYS,
+  ],
+  [ROLES.DISPOSITIVO_ENCUESTAS]: [
+    PERMISSIONS.CAPTURE_SURVEYS,
   ],
 }

@@ -13,8 +13,9 @@ import { tipoAusenciaLabel } from '../../services/absences.service'
 import {
   ESTADOS_ROL, needsReason, getRoster, createRoster, getAvailability, getDirectory, getPreviousStations,
   addAssignments, updateAssignment, removeAssignment, publishRoster, closeRoster,
-  listAdjustments, sendToReview, returnToDraft, getConflicts, listExceptions,
+  listAdjustments, sendToReview, returnToDraft, getConflicts, listExceptions, MODOS_AREA, setAreaMode,
 } from '../../services/roster.service'
+import { listRunnerFunctions } from '../../services/floor.service'
 import {
   listAuthorizations, listRestrictions, slotWarnings, ESTADOS_EMPLEADO, RESTRICTION_CODE,
 } from '../../services/availability.service'
@@ -29,9 +30,10 @@ const currentShift = (turnos) => {
 }
 
 const loadCatalogs = async () => {
-  const [turnos, areas, estaciones, bloquea, exigeHorario] = await Promise.all([
+  const [turnos, areas, estaciones, bloquea, exigeHorario, funciones] = await Promise.all([
     listShiftTypes(), listAreas(), listStations(),
     getConfigBool('ausencias_bloquean', true), getConfigBool('exigir_horario_en_rol', false),
+    listRunnerFunctions(),
   ])
   const activeAreas = areas.filter((a) => a.activo)
   return {
@@ -41,6 +43,7 @@ const loadCatalogs = async () => {
     estaciones: estaciones.filter((e) => e.activo && activeAreas.some((a) => a.id === e.area_id)),
     bloquea,
     exigeHorario,
+    funciones: funciones.filter((f) => f.activo),
   }
 }
 
@@ -50,7 +53,7 @@ export default function DailyRoster() {
   const canPublish = hasPermission(PERMISSIONS.PUBLISH_ROSTER)
 
   const catalogs = useLoader(loadCatalogs)
-  const { turnos = [], areas = [], estaciones = [], bloquea = true, exigeHorario = false } = catalogs.data
+  const { turnos = [], areas = [], estaciones = [], bloquea = true, exigeHorario = false, funciones = [] } = catalogs.data
 
   const [fecha, setFecha] = useState(today())
   const [turnoId, setTurnoId] = useState('')
@@ -87,6 +90,7 @@ export default function DailyRoster() {
     authorizations = [], restrictions = [],
   } = rosterData.data
   const assignments = useMemo(() => roster?.asignaciones ?? [], [roster])
+  const modeOf = (areaId) => roster?.modos?.find((m) => m.area_id === areaId)?.modo ?? 'estaciones'
 
   // En revisión y cerrado no se edita; publicado y modificado sí, con motivo.
   const editable = canManage && roster && ['borrador', 'publicado', 'modificado'].includes(roster.estado)
@@ -192,8 +196,11 @@ export default function DailyRoster() {
 
   const suggest = () => act(async () => {
     const previousStations = await getPreviousStations(fecha, turnoId)
+    // Only areas in service; stations only where the area works by stations.
     const { rows, uncovered } = suggestAssignments({
-      areas, stations: estaciones, assignments, availability, turnoId, previousStations,
+      areas: areas.filter((a) => modeOf(a.id) !== 'sin_servicio'),
+      stations: estaciones.filter((s) => modeOf(s.area_id) === 'estaciones'),
+      assignments, availability, turnoId, previousStations,
       fits: (slot) => warningsFor(slot.empleado_id, slot).length === 0,
     })
     if (rows.length) await addAssignments(rows.map((r) => ({ ...r, rol_id: roster.id })))
@@ -212,7 +219,8 @@ export default function DailyRoster() {
   }
 
   const meseros = assignments.filter((a) => a.funcion === 'mesero')
-  const covered = estaciones.filter((s) => meseros.some((a) => a.estacion_id === s.id)).length
+  const stationsInService = estaciones.filter((s) => modeOf(s.area_id) === 'estaciones')
+  const covered = stationsInService.filter((s) => meseros.some((a) => a.estacion_id === s.id)).length
   const closingCount = meseros.filter((a) => a.es_cierre).length
   const freeScheduled = availability.filter((e) => e.turno_id === turnoId && !e.es_descanso && !e.ausencia
     && !assignments.some((a) => a.empleado_id === e.empleado_id))
@@ -247,7 +255,7 @@ export default function DailyRoster() {
     </div>
   )
 
-  const addPerson = (funcion, areaId, label) => editable && (
+  const addPerson = (funcion, areaId, label, extra = {}, placeholder = null) => editable && (
     <select
       className="form-select"
       style={{ padding: '4px 8px', fontSize: 13, marginTop: 8 }}
@@ -257,12 +265,12 @@ export default function DailyRoster() {
         const empleadoId = e.target.value
         if (!empleadoId) return
         change(`${label}: ${name(empleadoId)}`, (motivo) => addAssignments([{
-          rol_id: roster.id, empleado_id: empleadoId, funcion, area_id: areaId, estacion_id: null, es_cierre: false,
+          rol_id: roster.id, empleado_id: empleadoId, funcion, area_id: areaId, estacion_id: null, es_cierre: false, ...extra,
         }], motivo))
       }}
       aria-label={label}
     >
-      <option value="">+ Agregar {funcion === 'runner' ? 'runner' : 'hostess'}</option>
+      <option value="">{placeholder ?? `+ Agregar ${funcion === 'runner' ? 'runner' : 'hostess'}`}</option>
       {options(funcion, null, { funcion, area_id: areaId, estacion_id: null })}
     </select>
   )
@@ -362,7 +370,7 @@ export default function DailyRoster() {
       ) : (
         <>
           <div className="grid-kpi" style={{ marginBottom: 'var(--space-4)' }}>
-            <div className="card"><p className="text-sm text-muted">Estaciones cubiertas</p><h3>{covered} / {estaciones.length}</h3></div>
+            <div className="card"><p className="text-sm text-muted">Estaciones cubiertas</p><h3>{covered} / {stationsInService.length}</h3></div>
             <div className="card"><p className="text-sm text-muted">Meseros de cierre</p><h3>{closingCount}</h3></div>
             <div className="card"><p className="text-sm text-muted">Personas en el rol</p><h3>{assignments.length}</h3></div>
             {canManage && <div className="card"><p className="text-sm text-muted">Programados sin asignar</p><h3>{freeScheduled.length}</h3></div>}
@@ -387,15 +395,63 @@ export default function DailyRoster() {
               const captain = assignments.find((a) => a.funcion === 'capitan' && a.area_id === area.id)
               const areaStations = estaciones.filter((s) => s.area_id === area.id)
               const runners = assignments.filter((a) => a.funcion === 'runner' && a.area_id === area.id)
+              const modo = modeOf(area.id)
+              const tiros = meseros.filter((a) => a.area_id === area.id && !a.estacion_id)
               return (
-                <div key={area.id} className="card">
+                <div key={area.id} className={`card ${modo === 'sin_servicio' ? 'roster-area--off' : ''}`}>
                   <h3 className="section-title">{area.nombre}</h3>
+
+                  <div className="form-group">
+                    <label className="form-label">Modo de trabajo</label>
+                    <div className="mode-switch" role="radiogroup" aria-label={`Modo de trabajo de ${area.nombre}`}>
+                      {Object.entries(MODOS_AREA).map(([value, label]) => (
+                        <button key={value} type="button" role="radio" aria-checked={modo === value}
+                          className={`mode-switch-btn ${modo === value ? 'active' : ''}`}
+                          disabled={!editable || busy || modo === value}
+                          onClick={() => act(() => setAreaMode(roster.id, area.id, value), `${area.nombre}: ${label}.`)}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {modo === 'sin_servicio' ? (
+                    <p className="text-sm text-muted">Esta área no tiene servicio en este turno: sus mesas no se asignan.</p>
+                  ) : (<>
 
                   <div className="form-group">
                     <label className="form-label">Capitán</label>
                     {slotSelect(captain, 'capitan', { funcion: 'capitan', area_id: area.id, estacion_id: null }, `Capitán de ${area.nombre}`)}
                   </div>
 
+                  {modo === 'tiros' ? (
+                    <div style={{ marginBottom: 'var(--space-4)' }}>
+                      <label className="form-label">Meseros en TIROS</label>
+                      <p className="text-sm text-muted" style={{ marginBottom: 'var(--space-2)' }}>
+                        Al sentar a un cliente, el sistema propone al que lleva menos comensales.
+                      </p>
+                      <table className="data-table">
+                        <thead><tr><th>Mesero</th><th>Cierre</th><th /></tr></thead>
+                        <tbody>
+                          {tiros.length === 0 && <tr><td colSpan={3} className="text-sm text-muted">Nadie en tiros todavía</td></tr>}
+                          {tiros.map((a) => (
+                            <tr key={a.id}>
+                              <td>{name(a.empleado_id)}</td>
+                              <td>
+                                <input type="checkbox" checked={a.es_cierre} disabled={!editable || busy}
+                                  aria-label={`${name(a.empleado_id)}: mesero de cierre`}
+                                  onChange={(e) => { const checked = e.target.checked; change(`${area.nombre}: ${checked ? 'marcar' : 'quitar'} de cierre a ${name(a.empleado_id)}`, (motivo) => updateAssignment(a.id, { es_cierre: checked }, motivo)) }} />
+                              </td>
+                              <td style={{ textAlign: 'right' }}>
+                                {editable && <Button variant="ghost" size="sm" disabled={busy} onClick={() => remove(a)}>Quitar</Button>}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {addPerson('mesero', area.id, `Mesero en TIROS de ${area.nombre}`, {}, '+ Agregar mesero')}
+                    </div>
+                  ) : (
                   <table className="data-table" style={{ marginBottom: 'var(--space-4)' }}>
                     <thead>
                       <tr><th>Estación</th><th>Mesero</th><th>Cierre</th></tr>
@@ -433,13 +489,31 @@ export default function DailyRoster() {
                       })}
                     </tbody>
                   </table>
+                  )}
 
-                  <label className="form-label">Runners</label>
+                  <label className="form-label">Runners del área</label>
                   {people(runners, remove)}
                   {addPerson('runner', area.id, `Agregar runner a ${area.nombre}`)}
+                  </>)}
                 </div>
               )
             })}
+
+            {funciones.length > 0 && (
+              <div className="card">
+                <h3 className="section-title">Runners por función</h3>
+                <p className="text-sm text-muted" style={{ marginBottom: 'var(--space-3)' }}>Apoyo de cocina para todo el local.</p>
+                <div className="runner-functions">
+                  {funciones.map((f) => (
+                    <div key={f.id} className="runner-function">
+                      <label className="form-label">{f.nombre}</label>
+                      {people(assignments.filter((a) => a.funcion === 'runner' && a.funcion_runner_id === f.id), remove)}
+                      {addPerson('runner', null, `Runner de ${f.nombre}`, { funcion_runner_id: f.id }, '+ Agregar runner')}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="card">
               <h3 className="section-title">Hostess</h3>
@@ -569,8 +643,8 @@ export default function DailyRoster() {
       >
         {confirm === 'review' || confirm === 'publish' ? (
           <>
-            <p>Se cubrirán <strong>{covered} de {estaciones.length}</strong> estaciones, con <strong>{closingCount}</strong> meseros de cierre.</p>
-            {covered < estaciones.length && <p className="text-sm text-muted" style={{ marginTop: 8 }}>Las mesas de estaciones sin mesero no se podrán asignar a clientes.</p>}
+            <p>Se cubrirán <strong>{covered} de {stationsInService.length}</strong> estaciones, con <strong>{closingCount}</strong> meseros de cierre.</p>
+            {covered < stationsInService.length && <p className="text-sm text-muted" style={{ marginTop: 8 }}>Las mesas de estaciones sin mesero no se podrán asignar a clientes.</p>}
             {conflicts.length > 0 && (
               <p className="text-sm" style={{ marginTop: 8 }}>
                 Hay <strong>{conflicts.length}</strong> conflictos por revisar{conflicts.some((c) => c.severidad === 'error') ? ', algunos bloquean' : ''}.

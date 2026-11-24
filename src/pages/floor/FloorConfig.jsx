@@ -10,26 +10,29 @@ import { useLoader } from '../../hooks/useLoader'
 import {
   listAreas, saveArea, listStations, saveStation,
   listTables, saveTable, createTableRange, setFloorItemActive, setTableState, ESTADOS_MESA,
+  tableRanges, listRunnerFunctions, saveRunnerFunction,
 } from '../../services/floor.service'
 
 const TABS = [
   { key: 'areas',      label: 'Áreas' },
   { key: 'estaciones', label: 'Estaciones' },
   { key: 'mesas',      label: 'Mesas' },
+  { key: 'runners',    label: 'Funciones de runner' },
 ]
 
 /* Loads the three catalogs together: stations and tables need the others for their selects. */
 const loadFloor = async () => {
-  const [areas, estaciones, mesas] = await Promise.all([listAreas(), listStations(), listTables()])
-  return { areas, estaciones, mesas }
+  const [areas, estaciones, mesas, funciones] = await Promise.all([listAreas(), listStations(), listTables(), listRunnerFunctions()])
+  return { areas, estaciones, mesas, funciones }
 }
 
 /* Modal definitions: title, empty values and save function per kind. */
 const FORMS = {
   area:    { create: 'Nueva área',     edit: 'Editar área',     empty: { nombre: '', descripcion: '', orden: 0 },    save: saveArea },
   station: { create: 'Nueva estación', edit: 'Editar estación', empty: { nombre: '', area_id: '' },                   save: saveStation },
-  table:   { create: 'Nueva mesa',     edit: 'Editar mesa',     empty: { numero: '', estacion_id: '', capacidad: 4 }, save: saveTable },
-  range:   { create: 'Agregar rango de mesas', empty: { estacion_id: '', desde: '', hasta: '', capacidad: 4 }, save: createTableRange },
+  table:   { create: 'Nueva mesa',     edit: 'Editar mesa',     empty: { numero: '', area_id: '', estacion_id: '', capacidad: 4 }, save: saveTable },
+  range:   { create: 'Agregar rango de mesas', empty: { area_id: '', estacion_id: '', desde: '', hasta: '', capacidad: 4 }, save: createTableRange },
+  runner:  { create: 'Nueva función de runner', edit: 'Editar función', empty: { nombre: '', orden: 0 }, save: saveRunnerFunction },
 }
 
 export default function FloorConfig() {
@@ -38,10 +41,10 @@ export default function FloorConfig() {
   // Disponible, reservada, en limpieza…: la operación diaria, no el catálogo.
   const canChangeState = hasPermission(PERMISSIONS.HOSTESS_DESK)
   const { data, loading, error, reload } = useLoader(loadFloor)
-  const { areas = [], estaciones = [], mesas = [] } = data
+  const { areas = [], estaciones = [], mesas = [], funciones = [] } = data
 
   const [tab, setTab] = useState('areas')
-  const [stationFilter, setStationFilter] = useState('')
+  const [areaFilter, setAreaFilter] = useState('')
   const [modal, setModal] = useState(null) // { kind, values }
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
@@ -55,9 +58,15 @@ export default function FloorConfig() {
   })), [estaciones])
 
   const tableRows = useMemo(() => mesas
-    .filter((m) => !stationFilter || m.estacion_id === stationFilter)
-    .map((m) => ({ ...m, estacion_nombre: m.estacion?.nombre, area_nombre: m.estacion?.area?.nombre })),
-  [mesas, stationFilter])
+    .filter((m) => !areaFilter || m.area_id === areaFilter)
+    .map((m) => ({ ...m, estacion_nombre: m.estacion?.nombre ?? 'Sin estación', area_nombre: m.area?.nombre })),
+  [mesas, areaFilter])
+
+  /* Ranges per area, as in the pilot version: "Salón · 12 mesas · 1–12". */
+  const areaRanges = useMemo(() => activeAreas.map((a) => {
+    const inArea = mesas.filter((m) => m.activo && m.area_id === a.id)
+    return { ...a, total: inArea.length, ranges: tableRanges(inArea.map((m) => m.numero)), sinEstacion: inArea.filter((m) => !m.estacion_id).length }
+  }).filter((a) => a.total), [activeAreas, mesas])
 
   const openModal = (kind, row) => {
     setFormError('')
@@ -152,12 +161,36 @@ export default function FloorConfig() {
     ...actionsColumn('table', 'mesas'),
   ]
 
-  const stationSelect = (value) => (
-    <select className="form-select" value={value} onChange={set('estacion_id')} required>
-      <option value="">Selecciona una estación</option>
-      {activeStations.map((s) => <option key={s.id} value={s.id}>{s.nombre} · {s.area?.nombre}</option>)}
-    </select>
+  /* Area first; the station is optional and limited to that area. */
+  const areaAndStation = (values) => (
+    <>
+      <div className="form-group">
+        <label className="form-label">Área <span className="required">*</span></label>
+        <select className="form-select" value={values.area_id}
+          onChange={(e) => setModal((m) => ({ ...m, values: { ...m.values, area_id: e.target.value, estacion_id: '' } }))} required>
+          <option value="">Selecciona un área</option>
+          {activeAreas.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+        </select>
+      </div>
+      <div className="form-group">
+        <label className="form-label">Estación (opcional)</label>
+        <select className="form-select" value={values.estacion_id} onChange={set('estacion_id')} disabled={!values.area_id}>
+          <option value="">Sin estación</option>
+          {activeStations.filter((s) => s.area_id === values.area_id).map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+        </select>
+        <p className="text-sm text-muted" style={{ marginTop: 4 }}>
+          Sin estación, la mesa se atiende cuando el área trabaja en TIROS (se define en el Rol diario).
+        </p>
+      </div>
+    </>
   )
+
+  const runnerColumns = [
+    { header: 'Orden',   accessor: 'orden', sortable: true },
+    { header: 'Función', accessor: 'nombre', sortable: true },
+    { header: 'Estado',  accessor: 'activo', render: (r) => <StatusBadge active={r.activo} /> },
+    ...actionsColumn('runner', 'funciones_runner'),
+  ]
 
   const v = modal?.values
 
@@ -176,10 +209,11 @@ export default function FloorConfig() {
             {tab === 'estaciones' && <Button variant="primary" onClick={() => openModal('station')} disabled={!activeAreas.length}>Nueva estación</Button>}
             {tab === 'mesas' && (
               <>
-                <Button variant="secondary" onClick={() => openModal('table')} disabled={!activeStations.length}>Nueva mesa</Button>
-                <Button variant="primary" onClick={() => openModal('range')} disabled={!activeStations.length}>Agregar rango</Button>
+                <Button variant="secondary" onClick={() => openModal('table')} disabled={!activeAreas.length}>Nueva mesa</Button>
+                <Button variant="primary" onClick={() => openModal('range')} disabled={!activeAreas.length}>Agregar rango</Button>
               </>
             )}
+            {tab === 'runners' && <Button variant="primary" onClick={() => openModal('runner')}>Nueva función</Button>}
           </div>
         )}
       </div>
@@ -209,15 +243,40 @@ export default function FloorConfig() {
       )}
 
       {tab === 'mesas' && (
-        <DataTable columns={tableColumns} data={tableRows} loading={loading} pageSize={15}
-          searchPlaceholder="Buscar mesa..." emptyMessage="No hay mesas con este filtro"
-          actions={
-            <select className="form-select" value={stationFilter} onChange={(e) => setStationFilter(e.target.value)} aria-label="Filtrar por estación">
-              <option value="">Todas las estaciones</option>
-              {estaciones.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-            </select>
-          }
-        />
+        <>
+          {areaRanges.length > 0 && (
+            <div className="floor-ranges">
+              {areaRanges.map((a) => (
+                <div key={a.id} className="card floor-range">
+                  <h3 className="section-title" style={{ marginBottom: 2 }}>{a.nombre}</h3>
+                  <p className="text-sm text-muted">{a.total} mesas{a.sinEstacion ? ` · ${a.sinEstacion} sin estación` : ''}</p>
+                  <div className="floor-range-chips">
+                    {a.ranges.map((r) => <span key={r} className="floor-range-chip">{r}</span>)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <DataTable columns={tableColumns} data={tableRows} loading={loading} pageSize={15}
+            searchPlaceholder="Buscar mesa..." emptyMessage="No hay mesas con este filtro"
+            actions={
+              <select className="form-select" value={areaFilter} onChange={(e) => setAreaFilter(e.target.value)} aria-label="Filtrar por área">
+                <option value="">Todas las áreas</option>
+                {areas.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+              </select>
+            }
+          />
+        </>
+      )}
+
+      {tab === 'runners' && (
+        <>
+          <p className="text-sm text-muted" style={{ marginBottom: 'var(--space-3)' }}>
+            Funciones de cocina para asignar runners en el Rol diario (por ejemplo Fría, Caliente, Descamoche, Stand boy).
+          </p>
+          <DataTable columns={runnerColumns} data={funciones} loading={loading}
+            searchPlaceholder="Buscar función..." emptyMessage="No hay funciones registradas" />
+        </>
       )}
 
       <Modal
@@ -275,10 +334,7 @@ export default function FloorConfig() {
                   <label className="form-label">Número de mesa <span className="required">*</span></label>
                   <input className="form-input" type="number" min="1" value={v.numero} onChange={set('numero')} required />
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Estación <span className="required">*</span></label>
-                  {stationSelect(v.estacion_id)}
-                </div>
+                {areaAndStation(v)}
                 <div className="form-group">
                   <label className="form-label">Capacidad</label>
                   <input className="form-input" type="number" min="1" value={v.capacidad} onChange={set('capacidad')} required />
@@ -288,10 +344,7 @@ export default function FloorConfig() {
 
             {modal.kind === 'range' && (
               <>
-                <div className="form-group">
-                  <label className="form-label">Estación <span className="required">*</span></label>
-                  {stationSelect(v.estacion_id)}
-                </div>
+                {areaAndStation(v)}
                 <div className="grid-2">
                   <div className="form-group">
                     <label className="form-label">Desde la mesa <span className="required">*</span></label>
@@ -307,6 +360,19 @@ export default function FloorConfig() {
                   <input className="form-input" type="number" min="1" value={v.capacidad} onChange={set('capacidad')} required />
                 </div>
                 <p className="text-sm text-muted">Si algún número ya existe, no se crea ninguna mesa del rango.</p>
+              </>
+            )}
+
+            {modal.kind === 'runner' && (
+              <>
+                <div className="form-group">
+                  <label className="form-label">Nombre <span className="required">*</span></label>
+                  <input className="form-input" placeholder="Ej: Fría" value={v.nombre} onChange={set('nombre')} required />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Orden en listas</label>
+                  <input className="form-input" type="number" min="0" value={v.orden} onChange={set('orden')} />
+                </div>
               </>
             )}
           </form>

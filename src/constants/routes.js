@@ -42,6 +42,9 @@ export const ROUTES = {
   SURVEYS:          '/surveys',
   ALERTS:           '/alerts',
   ACCOUNTS:         '/accounts',
+  DEVICES:          '/devices',
+  LINK_DEVICE:      '/vincular/:token',
+  LINK_DEVICE_BASE: '/vincular',
 }
 
 /* Old-version screens hidden in the operational version: they don't
@@ -53,6 +56,10 @@ export const HIDDEN_ROUTES = [
   ROUTES.REPORTS,
   ROUTES.HISTORY,
   ROUTES.CONFIG,
+  // Versión anterior con datos de ejemplo (rankings e incentivos de ventas; avisos sin base de datos).
+  ROUTES.RANKINGS,
+  ROUTES.INCENTIVES,
+  ROUTES.NOTICES,
 ]
 
 export const isHiddenRoute = (path) =>

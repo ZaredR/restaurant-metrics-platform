@@ -212,3 +212,8 @@ update public.empleados set estado = 'pendiente_alta' where numero_empleado = 'E
 
 -- Una mesa fuera de servicio para ver el estado en la hostess.
 update public.mesas set estado = 'fuera_servicio' where numero = 44;
+
+-- Las semanas con horarios de ejemplo quedan publicadas (el personal solo ve semanas publicadas).
+insert into public.horarios_semanas (semana, estado)
+select distinct fecha - (extract(isodow from fecha)::int - 1), 'publicada' from public.horarios
+on conflict (semana) do nothing;

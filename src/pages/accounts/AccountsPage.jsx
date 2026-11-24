@@ -25,7 +25,7 @@ const ACTIONS = [
   ['Cierre', [['VIEW_CLOSING', 'Preparar la propuesta de cierre'], ['AUTHORIZE_CLOSING', 'Autorizar el cierre']]],
   ['Encuestas', [['CAPTURE_SURVEYS', 'Capturar encuestas'], ['VIEW_SURVEY_RESULTS', 'Ver resultados por mesero'], ['MANAGE_SURVEYS', 'Configurar encuestas']]],
   ['Indicadores y alertas', [['VIEW_METRICS', 'Ver indicadores'], ['VIEW_ALERTS', 'Ver y atender alertas de su perfil'], ['MANAGE_ALERT_RULES', 'Configurar alertas']]],
-  ['Sistema', [['MANAGE_USERS', 'Usuarios y perfiles'], ['EXPORT_DATA', 'Exportar datos (queda registrado)'], ['VIEW_AUDIT', 'Consultar la auditoría']]],
+  ['Sistema', [['MANAGE_USERS', 'Usuarios y perfiles'], ['EXPORT_DATA', 'Exportar datos (queda registrado)'], ['VIEW_AUDIT', 'Consultar la auditoría'], ['MANAGE_DEVICES', 'Vincular y revocar tablets']]],
 ]
 
 const EMPTY = { email: '', nombre: '', rol: 'mesero', empleado_id: '' }

@@ -32,6 +32,11 @@ delete from public.empleado_restricciones;
 -- Para que las pruebas pasen a cualquier hora, ambos usan la zona de esta sesión.
 update public.configuracion set valor = to_jsonb(current_setting('TimeZone')) where clave = 'zona_horaria';
 
+-- Semanas del seed publicadas: el personal solo ve horarios de semanas publicadas (prueba 22).
+insert into public.horarios_semanas (semana, estado)
+select distinct fecha - (extract(isodow from fecha)::int - 1), 'publicada' from public.horarios
+on conflict (semana) do update set estado = 'publicada';
+
 /* 1. No se programa a alguien con ausencia aprobada */
 do $$
 begin
@@ -1155,6 +1160,303 @@ begin
   end if;
   update public.configuracion set valor = to_jsonb(current_setting('TimeZone')) where clave = 'zona_horaria';
   raise notice 'OK 21: zona horaria';
+end $$;
+
+/* 22. Horarios por hora y semanas publicadas */
+do $$
+declare
+  v_mesero uuid := (select id from auth.users where email = 'mesero.prueba@demo.com');
+  v_rrhh   uuid := gen_random_uuid();
+  v_lunes  date := (current_date + 21) - (extract(isodow from current_date + 21)::int - 1);
+  v_turno  text;
+  v_n      int;
+begin
+  perform set_config('request.jwt.claim.sub', '', true);
+  insert into auth.users (id, email) values (v_rrhh, 'rrhh.prueba@demo.com');
+  insert into public.usuarios (id, nombre, email, rol, empleado_id)
+  values (v_rrhh, 'Laura Torres', 'rrhh.prueba@demo.com', 'rrhh', pg_temp.empleado('E002'));
+
+  perform set_config('request.jwt.claim.sub', v_rrhh::text, true);
+  set local role authenticated;
+
+  /* Las horas deciden el turno: 16:00 a 00:00 es vespertino; 08:00 a 14:00, matutino */
+  insert into public.horarios (empleado_id, fecha, hora_inicio, hora_fin)
+  values (pg_temp.empleado('E006'), v_lunes, '16:00', '00:00');
+  select t.nombre into v_turno from public.horarios h join public.turnos t on t.id = h.turno_id
+   where h.empleado_id = pg_temp.empleado('E006') and h.fecha = v_lunes;
+  if v_turno <> 'Vespertino' then raise exception 'FALLO 22: 16:00-00:00 quedó en %', v_turno; end if;
+
+  insert into public.horarios (empleado_id, fecha, hora_inicio, hora_fin)
+  values (pg_temp.empleado('E006'), v_lunes + 1, '08:00', '14:00');
+  select t.nombre into v_turno from public.horarios h join public.turnos t on t.id = h.turno_id
+   where h.empleado_id = pg_temp.empleado('E006') and h.fecha = v_lunes + 1;
+  if v_turno <> 'Matutino' then raise exception 'FALLO 22: 08:00-14:00 quedó en %', v_turno; end if;
+
+  begin
+    insert into public.horarios (empleado_id, fecha, hora_inicio, hora_fin)
+    values (pg_temp.empleado('E006'), v_lunes + 2, '03:00', '05:00');
+    raise exception 'FALLO 22: se aceptó un horario fuera de todo turno';
+  exception when check_violation then null;
+  end;
+  reset role;
+
+  /* El mesero no ve la semana en borrador; publicada, sí */
+  perform set_config('request.jwt.claim.sub', v_mesero::text, true);
+  set local role authenticated;
+  select count(*) into v_n from public.horarios where fecha >= v_lunes and fecha < v_lunes + 7;
+  if v_n <> 0 then raise exception 'FALLO 22: el mesero ve una semana en borrador'; end if;
+  begin
+    perform public.publicar_semana(v_lunes);
+    raise exception 'FALLO 22: un mesero publicó la semana';
+  exception when insufficient_privilege then null;
+  end;
+  reset role;
+
+  perform set_config('request.jwt.claim.sub', v_rrhh::text, true);
+  set local role authenticated;
+  if (public.publicar_semana(v_lunes)).estado <> 'publicada' then raise exception 'FALLO 22: no se publicó'; end if;
+  reset role;
+
+  perform set_config('request.jwt.claim.sub', v_mesero::text, true);
+  set local role authenticated;
+  select count(*) into v_n from public.horarios where fecha >= v_lunes and fecha < v_lunes + 7;
+  if v_n <> 2 then raise exception 'FALLO 22: el mesero no ve su semana publicada (%)', v_n; end if;
+  reset role;
+
+  raise notice 'OK 22: horarios por hora y semanas publicadas';
+end $$;
+
+/* 23. Mesas por área, modo TIROS / sin servicio y runners por función */
+do $$
+declare
+  v_capitan uuid := (select id from auth.users where email = 'capitan.prueba@demo.com');
+  v_hostess uuid := (select id from auth.users where email = 'hostess.prueba@demo.com');
+  v_bar     uuid := (select id from public.areas where nombre = 'Bar');
+  v_terraza uuid := (select id from public.areas where nombre = 'Terraza');
+  v_fria    uuid := (select id from public.funciones_runner where nombre = 'Fría');
+  v_visita  uuid;
+  v_mesero  uuid;
+  v_n       int;
+begin
+  perform set_config('request.jwt.claim.sub', v_capitan::text, true);
+  set local role authenticated;
+
+  /* El Bar pasa a TIROS con dos meseros sin estación (rol publicado: con motivo) */
+  insert into public.rol_areas (rol_id, area_id, modo) values (pg_temp.rol_hoy(), v_bar, 'tiros')
+  on conflict (rol_id, area_id) do update set modo = 'tiros';
+  perform public.rol_ajustar('baja', a.id, null, 'Bar en tiros')
+     from public.rol_asignaciones a
+    where a.rol_id = pg_temp.rol_hoy() and a.empleado_id in (pg_temp.empleado('E011'), pg_temp.empleado('E012'));
+  perform public.rol_ajustar('alta', null, jsonb_build_object('rol_id', pg_temp.rol_hoy(), 'empleado_id', pg_temp.empleado('E011'),
+            'funcion', 'mesero', 'area_id', v_bar), 'Bar en tiros');
+  perform public.rol_ajustar('alta', null, jsonb_build_object('rol_id', pg_temp.rol_hoy(), 'empleado_id', pg_temp.empleado('E012'),
+            'funcion', 'mesero', 'area_id', v_bar), 'Bar en tiros');
+
+  /* Runner por función de cocina */
+  perform public.rol_ajustar('alta', null, jsonb_build_object('rol_id', pg_temp.rol_hoy(), 'empleado_id', pg_temp.empleado('E002'),
+            'funcion', 'runner', 'funcion_runner_id', v_fria), 'Apoyo en fría');
+  if not exists (select 1 from public.rol_asignaciones where rol_id = pg_temp.rol_hoy()
+                  and empleado_id = pg_temp.empleado('E002') and funcion_runner_id = v_fria) then
+    raise exception 'FALLO 23: el runner no quedó con su función';
+  end if;
+  reset role;
+
+  /* En TIROS, al sentar sin elegir mesero, toca el de menos carga; la hostess puede elegir otro del área */
+  perform set_config('request.jwt.claim.sub', v_hostess::text, true);
+  set local role authenticated;
+  insert into public.visitas (rol_id, nombre_referencia, adultos, mesa_id)
+  values (pg_temp.rol_hoy(), 'Tiro 1', 4, pg_temp.mesa(41)) returning id into v_visita;
+  select mesero_id into v_mesero from public.visitas where id = v_visita;
+  if v_mesero not in (pg_temp.empleado('E011'), pg_temp.empleado('E012')) then
+    raise exception 'FALLO 23: la mesa en TIROS no quedó con un mesero del área';
+  end if;
+
+  insert into public.visitas (rol_id, nombre_referencia, adultos, mesa_id)
+  values (pg_temp.rol_hoy(), 'Tiro 2', 2, pg_temp.mesa(43)) returning id into v_visita;
+  if (select mesero_id from public.visitas where id = v_visita) = v_mesero then
+    raise exception 'FALLO 23: el segundo tiro no fue al mesero con menos comensales';
+  end if;
+
+  insert into public.visitas (rol_id, nombre_referencia, adultos, mesa_id, mesero_id)
+  values (pg_temp.rol_hoy(), 'Tiro elegido', 2, pg_temp.mesa(40), v_mesero) returning id into v_visita;
+  if (select mesero_id from public.visitas where id = v_visita) <> v_mesero then
+    raise exception 'FALLO 23: no se respetó el mesero elegido por la hostess';
+  end if;
+
+  select count(*) into v_n from public.v_mesas_rol
+   where rol_id = pg_temp.rol_hoy() and numero = 41 and modo = 'tiros' and atendible;
+  if v_n <> 1 then raise exception 'FALLO 23: v_mesas_rol no marca la mesa en TIROS'; end if;
+  reset role;
+
+  /* Una mesa sin estación en un área por estaciones no se puede usar y sale en conflictos */
+  insert into public.mesas (numero, area_id) values (200, v_terraza);
+  perform set_config('request.jwt.claim.sub', v_hostess::text, true);
+  set local role authenticated;
+  begin
+    insert into public.visitas (rol_id, nombre_referencia, adultos, mesa_id)
+    values (pg_temp.rol_hoy(), 'Sin estación', 2, pg_temp.mesa(200));
+    raise exception 'FALLO 23: se sentó en una mesa sin estación en un área por estaciones';
+  exception when check_violation then null;
+  end;
+  reset role;
+
+  perform set_config('request.jwt.claim.sub', v_capitan::text, true);
+  set local role authenticated;
+  select count(*) into v_n from public.conflictos_rol(pg_temp.rol_hoy()) where descripcion like '%Terraza no tienen estación%';
+  if v_n <> 1 then raise exception 'FALLO 23: falta el conflicto de mesa sin estación'; end if;
+
+  /* Área sin servicio: no se sienta a nadie */
+  insert into public.rol_areas (rol_id, area_id, modo) values (pg_temp.rol_hoy(), v_terraza, 'sin_servicio')
+  on conflict (rol_id, area_id) do update set modo = 'sin_servicio';
+  reset role;
+  perform set_config('request.jwt.claim.sub', v_hostess::text, true);
+  set local role authenticated;
+  begin
+    insert into public.visitas (rol_id, nombre_referencia, adultos, mesa_id)
+    values (pg_temp.rol_hoy(), 'Terraza cerrada', 2, pg_temp.mesa(26));
+    raise exception 'FALLO 23: se sentó en un área sin servicio';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.rol_areas (rol_id, area_id, modo) values (pg_temp.rol_hoy(), v_terraza, 'tiros')
+    on conflict (rol_id, area_id) do update set modo = 'tiros';
+    raise exception 'FALLO 23: la hostess cambió el modo de un área';
+  exception when insufficient_privilege then null;
+  end;
+  reset role;
+
+  raise notice 'OK 23: mesas por área, TIROS, sin servicio y runners por función';
+end $$;
+
+/* 24. Dispositivos vinculados: enlace de un solo uso, permisos por función y revocación */
+do $$
+declare
+  v_gerente uuid := (select id from auth.users where email = 'gerente.prueba@demo.com');
+  v_hostess uuid := (select id from auth.users where email = 'hostess.prueba@demo.com');
+  v_tablet  uuid := gen_random_uuid();   -- sesión anónima de la tablet de recepción
+  v_tablet2 uuid := gen_random_uuid();   -- sesión anónima de la tablet de encuestas
+  v_intruso uuid := gen_random_uuid();   -- sesión anónima sin vincular
+  v_alta    jsonb;
+  v_token   text;
+  v_disp    uuid;
+  v_enc     uuid := (select id from public.encuestas where activa order by created_at limit 1);
+  v_n       int;
+begin
+  insert into auth.users (id, email) values (v_tablet, null), (v_tablet2, null), (v_intruso, null);
+
+  /* Una sesión anónima sin vincular no lee nada del local */
+  perform set_config('request.jwt.claim.sub', v_intruso::text, true);
+  set local role authenticated;
+  select count(*) into v_n from public.mesas;
+  if v_n <> 0 then raise exception 'FALLO 24: una sesión sin perfil lee las mesas'; end if;
+  select count(*) into v_n from public.empleados_directorio;
+  if v_n <> 0 then raise exception 'FALLO 24: una sesión sin perfil lee el directorio'; end if;
+  select count(*) into v_n from public.roles_diarios;
+  if v_n <> 0 then raise exception 'FALLO 24: una sesión sin perfil lee el rol'; end if;
+  begin
+    perform public.crear_dispositivo('Tablet pirata', 'hostess');
+    raise exception 'FALLO 24: una sesión sin perfil dio de alta un dispositivo';
+  exception when insufficient_privilege then null;
+  end;
+  reset role;
+
+  /* La hostess no da de alta dispositivos; gerencia sí */
+  perform set_config('request.jwt.claim.sub', v_hostess::text, true);
+  set local role authenticated;
+  begin
+    perform public.crear_dispositivo('Tablet recepción', 'hostess');
+    raise exception 'FALLO 24: la hostess dio de alta un dispositivo';
+  exception when insufficient_privilege then null;
+  end;
+  reset role;
+
+  perform set_config('request.jwt.claim.sub', v_gerente::text, true);
+  set local role authenticated;
+  v_alta := public.crear_dispositivo('Tablet recepción', 'hostess');
+  v_token := v_alta->>'token';
+  v_disp := (v_alta->>'id')::uuid;
+  if exists (select 1 from public.dispositivos where token_hash = v_token) then
+    raise exception 'FALLO 24: el token quedó guardado en claro';
+  end if;
+  reset role;
+
+  /* La tablet canjea el enlace y queda como hostess */
+  perform set_config('request.jwt.claim.sub', v_tablet::text, true);
+  set local role authenticated;
+  begin
+    perform public.vincular_dispositivo('token-falso');
+    raise exception 'FALLO 24: se vinculó con un token falso';
+  exception when check_violation then null;
+  end;
+  if (public.vincular_dispositivo(v_token)->>'funcion') <> 'hostess' then
+    raise exception 'FALLO 24: la tablet no quedó con la función del dispositivo';
+  end if;
+  if public.rol_actual() <> 'hostess' then raise exception 'FALLO 24: rol_actual no reconoce la tablet'; end if;
+  insert into public.visitas (rol_id, nombre_referencia, adultos) values (pg_temp.rol_hoy(), 'Desde la tablet', 2);
+  if public.nombre_usuario_actual() <> 'Dispositivo: Tablet recepción' then
+    raise exception 'FALLO 24: la auditoría no nombra al dispositivo';
+  end if;
+  reset role;
+
+  /* El enlace es de un solo uso */
+  perform set_config('request.jwt.claim.sub', v_intruso::text, true);
+  set local role authenticated;
+  begin
+    perform public.vincular_dispositivo(v_token);
+    raise exception 'FALLO 24: el enlace se usó dos veces';
+  exception when check_violation then null;
+  end;
+  reset role;
+
+  /* Un enlace vencido no sirve */
+  perform set_config('request.jwt.claim.sub', v_gerente::text, true);
+  set local role authenticated;
+  v_alta := public.crear_dispositivo('Tablet encuestas', 'encuestas');
+  reset role;
+  update public.dispositivos set token_expira = now() - interval '1 minute' where id = (v_alta->>'id')::uuid;
+  perform set_config('request.jwt.claim.sub', v_tablet2::text, true);
+  set local role authenticated;
+  begin
+    perform public.vincular_dispositivo(v_alta->>'token');
+    raise exception 'FALLO 24: se vinculó con un enlace vencido';
+  exception when check_violation then null;
+  end;
+  reset role;
+
+  /* Enlace nuevo: la tablet de encuestas solo captura encuestas */
+  perform set_config('request.jwt.claim.sub', v_gerente::text, true);
+  set local role authenticated;
+  v_token := public.generar_enlace_dispositivo((v_alta->>'id')::uuid);
+  reset role;
+  perform set_config('request.jwt.claim.sub', v_tablet2::text, true);
+  set local role authenticated;
+  perform public.vincular_dispositivo(v_token);
+  if v_enc is not null then
+    perform * from public.visitas_sin_encuesta(current_date, v_enc);
+  end if;
+  begin
+    insert into public.visitas (rol_id, nombre_referencia, adultos) values (pg_temp.rol_hoy(), 'No debería', 2);
+    raise exception 'FALLO 24: la tablet de encuestas registró una llegada';
+  exception when insufficient_privilege then null;
+  end;
+  reset role;
+
+  /* Revocado: pierde el acceso al instante */
+  perform set_config('request.jwt.claim.sub', v_gerente::text, true);
+  set local role authenticated;
+  perform public.revocar_dispositivo(v_disp);
+  reset role;
+  perform set_config('request.jwt.claim.sub', v_tablet::text, true);
+  set local role authenticated;
+  if public.mi_dispositivo() is not null then raise exception 'FALLO 24: la tablet revocada sigue vinculada'; end if;
+  begin
+    insert into public.visitas (rol_id, nombre_referencia, adultos) values (pg_temp.rol_hoy(), 'Revocada', 2);
+    raise exception 'FALLO 24: la tablet revocada registró una llegada';
+  exception when insufficient_privilege then null;
+  end;
+  reset role;
+
+  raise notice 'OK 24: dispositivos vinculados';
 end $$;
 
 rollback;

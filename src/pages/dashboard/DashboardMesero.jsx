@@ -3,7 +3,7 @@ import TodaySummary from './TodaySummary'
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 import KPICard from '../../components/ui/KPICard'
 import { currency, number, percent } from '../../utils/formatters'
-import { ROUTES } from '../../constants/routes'
+import { ROUTES, isHiddenRoute } from '../../constants/routes'
 import { useAuthStore } from '../../store/auth.store'
 
 const kpis = [
@@ -96,7 +96,7 @@ export default function DashboardMesero() {
       <div className="card" style={{ marginBottom: 'var(--space-6)' }}>
         <div className="card-header">
           <h3 className="card-title">Mis incentivos activos</h3>
-          <Link to={ROUTES.INCENTIVES} className="btn btn-ghost btn-sm">Ver todos →</Link>
+          {!isHiddenRoute(ROUTES.INCENTIVES) && <Link to={ROUTES.INCENTIVES} className="btn btn-ghost btn-sm">Ver todos →</Link>}
         </div>
         {incentivos.map((inc) => (
           <div key={inc.nombre} style={{ padding: 'var(--space-4) 0', borderBottom: '1px solid var(--border-color)' }}>

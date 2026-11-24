@@ -137,7 +137,7 @@ export default function DashboardAdmin() {
         <div className="card" style={{ gridColumn: 'span 2' }}>
           <div className="card-header">
             <h3 className="card-title">Top meseros del mes</h3>
-            <Link to={ROUTES.RANKINGS} className="btn btn-ghost btn-sm">Ver ranking completo →</Link>
+            {!isHiddenRoute(ROUTES.RANKINGS) && <Link to={ROUTES.RANKINGS} className="btn btn-ghost btn-sm">Ver ranking completo →</Link>}
           </div>
           <div className="ranking-list">
             {topMeseros.map((m, i) => (
@@ -159,7 +159,7 @@ export default function DashboardAdmin() {
           <div className="card card-sm">
             <div className="card-header">
               <h3 className="card-title">Incentivos activos</h3>
-              <Link to={ROUTES.INCENTIVES} className="btn btn-ghost btn-sm">Ver →</Link>
+              {!isHiddenRoute(ROUTES.INCENTIVES) && <Link to={ROUTES.INCENTIVES} className="btn btn-ghost btn-sm">Ver →</Link>}
             </div>
             {incentivosActivos.map((inc) => (
               <div key={inc.nombre} style={{ padding: 'var(--space-3) 0', borderBottom: '1px solid var(--border-color)' }}>
@@ -177,7 +177,7 @@ export default function DashboardAdmin() {
           <div className="card card-sm">
             <div className="card-header">
               <h3 className="card-title">Avisos recientes</h3>
-              <Link to={ROUTES.NOTICES} className="btn btn-ghost btn-sm">Ver →</Link>
+              {!isHiddenRoute(ROUTES.NOTICES) && <Link to={ROUTES.NOTICES} className="btn btn-ghost btn-sm">Ver →</Link>}
             </div>
             {avisos.map((a) => (
               <div key={a.titulo} className={`notice-card ${a.tipo !== 'info' ? 'unread' : ''}`} style={{ marginBottom: 'var(--space-2)' }}>

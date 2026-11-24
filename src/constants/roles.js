@@ -10,6 +10,9 @@ export const ROLES = {
   RRHH:       'rrhh',
   /* Consulta indicadores generales sin modificar nada (contextualización 3.2) */
   ANALISTA:   'analista',
+  /* Tablets vinculadas (no son personas; se dan de alta en Dispositivos) */
+  DISPOSITIVO_HOSTESS:   'dispositivo_hostess',
+  DISPOSITIVO_ENCUESTAS: 'dispositivo_encuestas',
 }
 
 export const ROLE_LABELS = {
@@ -22,4 +25,6 @@ export const ROLE_LABELS = {
   [ROLES.RUNNER]:     'Runner',
   [ROLES.RRHH]:       'Recursos Humanos',
   [ROLES.ANALISTA]:   'Analista',
+  [ROLES.DISPOSITIVO_HOSTESS]:   'Tablet de recepción',
+  [ROLES.DISPOSITIVO_ENCUESTAS]: 'Tablet de encuestas',
 }

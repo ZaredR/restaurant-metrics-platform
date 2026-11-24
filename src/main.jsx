@@ -10,6 +10,7 @@ import './styles/components.css'
 import './styles/animations.css'
 import './styles/sidebar.css'
 import './styles/auth.css'
+import './styles/theme.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
